@@ -1,0 +1,108 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558
+    // for the documentation about the tasks.json format
+
+    // On Windows, you need MSYS2 as your integrated terminal to run those commands.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build",
+            "type": "shell",
+            "command": "make -j4",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+            "group": {"kind": "build", "isDefault": true},
+        },
+        {
+            "label": "Build & Run",
+            "type": "shell",
+            "windows": {"command": "make -j4 && cd bin && PATH= ./imp-re"},
+            "linux": {"command": "make -j4 && cd bin && ./imp-re"},
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "Run",
+            "type": "shell",
+            "windows": {"command": "cd bin && PATH= ./imp-re"},
+            "linux": {"command": "cd bin && ./imp-re"},
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "↪ Debug",
+            "type": "shell",
+            "command": "make use mode=debug",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "↪ Debug (hard)",
+            "type": "shell",
+            "command": "make use mode=debug_hard",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "↪ Profile (optimized)",
+            "type": "shell",
+            "command": "make use mode=release_profiled",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "↪ Release",
+            "type": "shell",
+            "command": "make use mode=release",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "◙ Update Commands",
+            "type": "shell",
+            "command": "make commands",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "▶ Reset Autocompletion Cache",
+            "type": "shell",
+            "command": "rm -rf ./.clangd",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⦻ Rebuild",
+            "type": "shell",
+            "command": "make clean_mode && make -j4",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⧁ Reset PCH",
+            "type": "shell",
+            "command": "make clean_pch",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⦿ Check Dependencies",
+            "type": "shell",
+            "command": "make find_deps",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⦸ Reset Dependencies",
+            "type": "shell",
+            "command": "make clean_deps",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⧮ Clean (this mode)",
+            "type": "shell",
+            "command": "make clean_mode",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⧯ Clean (all build artifacts)",
+            "type": "shell",
+            "command": "make clean",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+        {
+            "label": "⧉ Clean (everything)",
+            "type": "shell",
+            "command": "make clean_everything",
+            "presentation": {"echo": true, "reveal": "always", "focus": false, "panel": "shared", "showReuseMessage": false, "clear": true},
+        },
+    ]
+}
