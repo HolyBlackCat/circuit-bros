@@ -6,13 +6,19 @@ static Graphics::DummyVertexArray dummy_vao = nullptr;
 static const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
 static Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
 
-Graphics::TextureAtlas texture_atlas(ivec2(2048), "assets/_images", "assets/atlas.png", "assets/atlas.refl");
-Graphics::Texture texture_main = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(texture_atlas.GetImage());
+Graphics::TextureAtlas &texture_atlas()
+{
+    static Graphics::TextureAtlas ret(ivec2(2048), "assets/_images", "assets/atlas.png", "assets/atlas.refl");
+    return ret;
+}
+Graphics::Texture texture_main = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(texture_atlas().GetImage());
 
 AdaptiveViewport adaptive_viewport(shader_config, screen_size);
 Render r = adjust_(Render(0x2000, shader_config), SetTexture(texture_main), SetMatrix(adaptive_viewport.GetDetails().MatrixCentered()));
 
 Input::Mouse mouse;
+
+Random rng(std::random_device{}());
 
 static State::StateManager state_manager;
 
