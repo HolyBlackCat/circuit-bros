@@ -1,9 +1,10 @@
-const ivec2 screen_size(480, 270);
-Interface::Window window("Iota", screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, min_size = screen_size));
-Graphics::DummyVertexArray dummy_vao = nullptr;
+#include "main.h"
 
-const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
-Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
+Interface::Window window("Circuit Bros", screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, min_size = screen_size));
+static Graphics::DummyVertexArray dummy_vao = nullptr;
+
+static const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
+static Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
 
 Graphics::TextureAtlas texture_atlas(ivec2(2048), "assets/_images", "assets/atlas.png", "assets/atlas.refl");
 Graphics::Texture texture_main = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(texture_atlas.GetImage());
@@ -13,7 +14,9 @@ Render r = adjust_(Render(0x2000, shader_config), SetTexture(texture_main), SetM
 
 Input::Mouse mouse;
 
-struct State : Program::DefaultBasicState
+static State::StateManager state_manager;
+
+struct ProgramState : Program::DefaultBasicState
 {
     void Resize()
     {
@@ -97,31 +100,24 @@ struct State : Program::DefaultBasicState
         Graphics::Blending::FuncNormalPre();
     }
 
-    float angle = 0;
-
     void HighLevelTick()
     {
-        angle += 0.01;
-        ImGui::ShowDemoWindow();
+        state_manager.Tick();
     }
 
     void HighLevelRender()
     {
-        Graphics::SetClearColor(fvec3(0));
-        Graphics::Clear();
-
-        r.BindShader();
-
-        r.iquad(mouse.pos(), ivec2(32)).center().rotate(angle).color(mouse.left.down() ? fvec3(1,0.5,0) : fvec3(0,0.5,1));
-
-        r.Finish();
+        state_manager.Render();
     }
 };
 
 int _main_(int, char **)
 {
-    State loop_state;
+    state_manager.SetState(State::Tag("Game"));
+
+    ProgramState loop_state;
     loop_state.Init();
     loop_state.Resize();
     loop_state.RunMainLoop();
+    return 0;
 }

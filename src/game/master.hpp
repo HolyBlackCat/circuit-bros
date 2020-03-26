@@ -6,6 +6,7 @@
 #include "gameutils/adaptive_viewport.h"
 #include "gameutils/config.h"
 #include "gameutils/render.h"
+#include "gameutils/state.h"
 #include "gameutils/tiled_map.h"
 #include "graphics/complete.h"
 #include "input/complete.h"
