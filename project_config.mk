@@ -5,7 +5,7 @@ SOURCE_DIRS := src lib
 OBJECT_DIR := obj
 
 # Resulting binary
-OUTPUT_FILE := bin/imp-re
+OUTPUT_FILE := bin/circuit-bros
 LINKER_MODE := CXX
 
 # Dependency set name
