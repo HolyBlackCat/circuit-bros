@@ -5,6 +5,7 @@
 
 #include "game/main.h"
 #include "gameutils/tiled_map.h"
+#include "macros/adjust.h"
 #include "meta/misc.h"
 #include "program/errors.h"
 #include "reflection/full.h"
@@ -107,9 +108,9 @@ class Map
         ivec2 corner_a = div_ex(camera_pos - viewport_size/2, tile_size);
         ivec2 corner_b = div_ex(camera_pos + viewport_size/2, tile_size);
 
-        auto DrawTile = [&](ivec2 screen_pixel_pos, ivec2 tex_pos)
+        auto DrawTile = [&](ivec2 screen_pixel_pos, ivec2 tex_pos, ivec2 tex_size = ivec2(1))
         {
-            r.iquad(screen_pixel_pos, AtlasRegion().region(tex_pos * tile_size, ivec2(tile_size)));
+            r.iquad(screen_pixel_pos, AtlasRegion().region(tex_pos * tile_size, tex_size * tile_size));
         };
 
         for (ivec2 pos : corner_a <= vector_range <= corner_b)
@@ -133,23 +134,55 @@ class Map
                 break;
               case TileType::stone:
                 {
-                    bool inner = true;
-                    for (ivec2 offset : {ivec2(1,0), ivec2(1,1), ivec2(0,1), ivec2(-1,1), ivec2(-1,0), ivec2(-1,-1), ivec2(0,-1), ivec2(1,-1)})
+                    unsigned char mask = 0;
+
+                    for (int i = 0; i < 8; i++)
+                        mask = mask << 1 | SameAs(ivec2::dir8(i));
+
+                    int state = 0, variant = 0;
+                    if (mask == 0b11111111)
                     {
-                        if (!SameAs(offset))
-                        {
-                            inner = false;
-                            break;
-                        }
+                        variant = std::array{0,1,2,3,3}[random % 5];
+                    }
+                    else if ((mask & 0b10001000) == 0b10001000 && ((mask & 0b00100000) == 0 || (mask & 0b01010000) == 0))
+                    {
+                        state = 1;
+                        variant = 2 + random % 2;
+                    }
+                    else if (mask & 0b10000000 && (mask & 0b01100000) != 0b01100000)
+                    {
+                        state = 1;
+                        variant = 0;
+                    }
+                    else if (mask & 0b00001000 && (mask & 0b00110000) != 0b00110000)
+                    {
+                        state = 1;
+                        variant = 1;
+                    }
+                    else
+                    {
+                        variant = std::array{0,0,0,1,1,2}[random % 6];
                     }
 
-                    int r;
-                    if (inner)
-                        r = std::array{0,1,2,3,3}[random % 5];
-                    else
-                        r = std::array{0,0,0,1,1,2}[random % 6];
+                    DrawTile(pixel_pos, ivec2(0 + state, 1 + variant));
 
-                    DrawTile(pixel_pos, ivec2(0, 1 + r));
+                    // Grass
+                    if (Refl::Class::Member<LayerIndex>(tiles.try_get(pos with(y -= 1))) == TileType::air)
+                    {
+                        bool grass_l = mask & 0b00001000 && Refl::Class::Member<LayerIndex>(tiles.try_get(pos + ivec2(-1,-1))) == TileType::air;
+                        bool grass_r = mask & 0b10000000 && Refl::Class::Member<LayerIndex>(tiles.try_get(pos + ivec2( 1,-1))) == TileType::air;
+
+                        int state = -1;
+                        if (grass_l && grass_r)
+                            state = random / 3 % 2;
+                        else if (grass_r)
+                            state = 2;
+                        else if (grass_l)
+                            state = 3;
+
+                        if (state != -1)
+                            DrawTile(pixel_pos with(y -= tile_size), ivec2(0 + state, 5), ivec2(1,2));
+                    }
                 }
                 break;
             }
