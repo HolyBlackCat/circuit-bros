@@ -1,3 +1,4 @@
+#include "game/components/editor.h"
 #include "game/main.h"
 #include "game/map.h"
 #include "reflection/full_with_poly.h"
@@ -17,6 +18,8 @@ namespace States
 
         Map map;
 
+        Components::Editor editor;
+
         Game() : map("assets/maps/1.json") {}
 
         float angle = 0;
@@ -25,8 +28,13 @@ namespace States
         {
             (void)next_state;
 
-            angle += 0.01;
             // ImGui::ShowDemoWindow();
+
+            angle += 0.01;
+
+            editor.Tick();
+            if (Input::Button(Input::space).pressed())
+                editor.SetOpen(!editor.IsOpen());
         }
 
         void Render() const override
@@ -39,6 +47,7 @@ namespace States
             r.iquad(ivec2(0), atlas.sky_background).center();
 
             map.Render(Meta::value_tag<0>{}, mouse.pos());
+            editor.Render();
 
             r.iquad(mouse.pos(), ivec2(32)).center().rotate(angle).color(mouse.left.down() ? fvec3(1,0.5,0) : fvec3(0,0.5,1));
 

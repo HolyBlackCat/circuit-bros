@@ -11,3 +11,4 @@ compile_commands.json
 gmon.out
 .clangd/**
 /*_deps_*.tar.gz
+bin/assets/atlas.*

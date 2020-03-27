@@ -1,4 +1,4 @@
-#include "main.h"
+#include "game/main.h"
 
 Interface::Window window("Circuit Bros", screen_size * 2, Interface::windowed, adjust_(Interface::WindowSettings{}, min_size = screen_size));
 static Graphics::DummyVertexArray dummy_vao = nullptr;
