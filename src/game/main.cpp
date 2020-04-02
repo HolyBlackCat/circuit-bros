@@ -6,9 +6,23 @@ static Graphics::DummyVertexArray dummy_vao = nullptr;
 static const Graphics::ShaderConfig shader_config = Graphics::ShaderConfig::Core();
 static Interface::ImGuiController gui_controller(Poly::derived<Interface::ImGuiController::GraphicsBackend_Modern>, adjust_(Interface::ImGuiController::Config{}, shader_header = shader_config.common_header));
 
+Graphics::Font &font_main()
+{
+    static Graphics::Font ret;
+    return ret;
+}
+
 Graphics::TextureAtlas &texture_atlas()
 {
+    static Graphics::FontFile font_file_main("assets/Cat12.ttf", 12);
     static Graphics::TextureAtlas ret(ivec2(2048), "assets/_images", "assets/atlas.png", "assets/atlas.refl");
+    Graphics::Image &image = ret.GetImage();
+    auto region = ret.Get("font_storage.png");
+    Unicode::CharSet ranges({Unicode::Ranges::Basic_Latin, Unicode::Ranges::Cyrillic});
+    std::vector<Graphics::FontAtlasEntry> entries = {
+        Graphics::FontAtlasEntry(font_main(), font_file_main, ranges, Graphics::FontFile::monochrome | Graphics::FontFile::hinting_mode_light, Graphics::FontAtlasEntry::no_line_gap),
+    };
+    Graphics::MakeFontAtlas(image, region.pos, region.size, entries);
     return ret;
 }
 Graphics::Texture texture_main = Graphics::Texture(nullptr).Wrap(Graphics::clamp).Interpolation(Graphics::nearest).SetData(texture_atlas().GetImage());
@@ -19,6 +33,12 @@ Render r = adjust_(Render(0x2000, shader_config), SetTexture(texture_main), SetM
 Input::Mouse mouse;
 
 Random rng(std::random_device{}());
+
+const InterfaceStrings &interface_strings()
+{
+    static InterfaceStrings ret("assets/strings.refl");
+    return ret;
+}
 
 static State::StateManager state_manager;
 
@@ -96,9 +116,9 @@ struct ProgramState : Program::DefaultBasicState
         ImGui::StyleColorsDark();
 
         // Load various small fonts
-        auto monochrome_font_flags = ImGuiFreeType::Monochrome | ImGuiFreeType::MonoHinting;
+        // auto monochrome_font_flags = ImGuiFreeType::Monochrome | ImGuiFreeType::MonoHinting;
 
-        gui_controller.LoadFont("assets/Monokat_6x12.ttf", 12.0f, adjust(ImFontConfig{}, RasterizerFlags = monochrome_font_flags));
+        gui_controller.LoadFont("assets/Cat12.ttf", 12.0f, adjust(ImFontConfig{}, RasterizerFlags = ImGuiFreeType::Monochrome | ImGuiFreeType::LightHinting));
         gui_controller.LoadDefaultFont();
         gui_controller.RenderFontsWithFreetype();
 

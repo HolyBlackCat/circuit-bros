@@ -1,0 +1,11 @@
+[
+    ("Editor/ButtonTooltip_Start", "Start"),
+    ("Editor/ButtonTooltip_Pause", "Pause"),
+    ("Editor/ButtonTooltip_AdvanceOneTick", "Advance by a single step"),
+    ("Editor/ButtonTooltip_Stop", "Abort"),
+    ("Editor/ButtonTooltip_Continue", "Continue"),
+    ("Editor/ButtonTooltip_AddOrGate", "Add OR gate"),
+    ("Editor/ButtonTooltip_AddAndGate", "Add AND gate"),
+    ("Editor/ButtonTooltip_AddOther", "Add other"),
+    ("Editor/ButtonTooltip_Erase", "Erase"),
+]

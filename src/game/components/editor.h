@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include "game/components/tooltip_controller.h"
+
 namespace Components
 {
     class Editor
@@ -19,7 +21,10 @@ namespace Components
         [[nodiscard]] bool IsOpen() const;
         void SetOpen(bool is_open, bool immediately = false);
 
-        void Tick();
+        enum class GameState {stopped, playing, paused, _count};
+        GameState GetState() const;
+
+        void Tick(TooltipController &tooltip_controller);
         void Render() const;
     };
 }
