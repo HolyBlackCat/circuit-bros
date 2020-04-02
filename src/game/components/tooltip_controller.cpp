@@ -63,7 +63,7 @@ namespace Components
         if (s.show_tooltip)
         {
             ivec2 pos = s.tooltip_pos + s.padding_around_text_a + offset;
-            clamp_var(pos.x, -screen_size.x/2 + s.padding_around_text_a.x + screen_edge_min_dist, screen_size.x/2 - s.tooltip_text_stats.size.x - s.padding_around_text_b.x - screen_edge_min_dist);
+            clamp_var(pos, -screen_size/2 + s.padding_around_text_a + screen_edge_min_dist, screen_size/2 - s.tooltip_text_stats.size - s.padding_around_text_b - screen_edge_min_dist);
 
             // Background
             r.iquad(pos - s.padding_around_text_a, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b).color(color_bg).alpha(alpha_bg);
