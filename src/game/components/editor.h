@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "game/components/circuit.h"
 #include "game/components/tooltip_controller.h"
 
 namespace Components
@@ -24,7 +25,7 @@ namespace Components
         enum class GameState {stopped, playing, paused, _count};
         GameState GetState() const;
 
-        void Tick(TooltipController &tooltip_controller);
-        void Render() const;
+        void Tick(Circuit &circuit, TooltipController &tooltip_controller);
+        void Render(const Circuit &circuit) const;
     };
 }

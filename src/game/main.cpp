@@ -93,6 +93,8 @@ struct ProgramState : Program::DefaultBasicState
             Program::Exit();
 
         gui_controller.PreTick();
+        ImGui::GetIO().MouseDrawCursor = ImGui::IsAnyWindowHovered();
+
         HighLevelTick();
     }
 
@@ -124,6 +126,9 @@ struct ProgramState : Program::DefaultBasicState
 
         Graphics::Blending::Enable();
         Graphics::Blending::FuncNormalPre();
+
+        mouse.HideCursor();
+        ImGui::GetIO().ConfigFlags = ImGuiConfigFlags_NoMouseCursorChange;
     }
 
     void HighLevelTick()

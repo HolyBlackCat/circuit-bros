@@ -1,3 +1,4 @@
+#include "game/components/circuit.h"
 #include "game/components/editor.h"
 #include "game/components/tooltip_controller.h"
 #include "game/main.h"
@@ -19,12 +20,11 @@ namespace States
 
         Map map;
 
+        Components::Circuit circuit;
         Components::Editor editor;
         Components::TooltipController tooltip_controller;
 
         Game() : map("assets/maps/1.json") {}
-
-        float angle = 0;
 
         void Tick(const State::NextState &next_state) override
         {
@@ -32,9 +32,7 @@ namespace States
 
             // ImGui::ShowDemoWindow();
 
-            angle += 0.01;
-
-            editor.Tick(tooltip_controller);
+            editor.Tick(circuit, tooltip_controller);
             if (Input::Button(Input::tab).pressed())
                 editor.SetOpen(!editor.IsOpen());
 
@@ -51,11 +49,8 @@ namespace States
             r.iquad(ivec2(0), atlas.sky_background).center();
 
             map.Render(Meta::value_tag<0>{}, ivec2(200,50));
-            r.iquad(mouse.pos(), ivec2(32)).center().rotate(angle).color(mouse.left.down() ? fvec3(1,0.5,0) : fvec3(0.5));
-            editor.Render();
-
+            editor.Render(circuit);
             tooltip_controller.Render();
-
 
             r.Finish();
         }
