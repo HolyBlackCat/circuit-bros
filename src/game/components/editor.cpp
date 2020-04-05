@@ -344,34 +344,42 @@ namespace Components
         }
 
         { // Change editor mode (add/remove node)
+            // Disatble tools if not extended
             if (!s.partially_extended)
             {
                 s.held_node = nullptr;
                 s.eraser_mode = false;
             }
 
+            // Disable tools on right click
             if (s.fully_extended && mouse.right.pressed() && !drag_modifier_down)
             {
                 s.held_node = nullptr;
                 s.eraser_mode = false;
             }
 
-            if (s.button_add_or)
-            {
-                s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
-                s.eraser_mode = false;
-            }
+            bool can_change_mode = !s.now_creating_rect_selection && !s.now_dragging_selected_nodes;
 
-            if (s.button_add_and)
+            // Button actions
+            if (can_change_mode)
             {
-                s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
-                s.eraser_mode = false;
-            }
+                if (s.button_add_or)
+                {
+                    s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
+                    s.eraser_mode = false;
+                }
 
-            if (s.button_erase)
-            {
-                s.held_node = nullptr;
-                s.eraser_mode = true;
+                if (s.button_add_and)
+                {
+                    s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
+                    s.eraser_mode = false;
+                }
+
+                if (s.button_erase)
+                {
+                    s.held_node = nullptr;
+                    s.eraser_mode = true;
+                }
             }
         }
 
@@ -392,12 +400,14 @@ namespace Components
         {
             ivec2 abs_mouse_pos = mouse.pos() - s.window_offset + s.view_offset;
 
+            // Clear selection when holding a node or when in the eraser mode.
             if (s.held_node || s.eraser_mode)
             {
-                // Clear selection when holding a node or when in the eraser mode.
                 s.selected_node_indices.clear();
             }
-            else if (s.mouse_in_window)
+
+            // Process clicks in selection or eraser mode.
+            if (s.mouse_in_window && !s.held_node)
             {
                 // Clicked on an empty space, form a rectangular selection
                 if (mouse.left.pressed() && s.hovering_over_node_index == size_t(-1))
@@ -407,9 +417,15 @@ namespace Components
                 }
 
                 // Clicked on a node
-                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes   )
+                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes)
                 {
-                    if (s.selection_add_modifier_down)
+                    if (s.eraser_mode)
+                    {
+                        circuit.nodes.erase(circuit.nodes.begin() + s.hovering_over_node_index);
+                        s.hovering_over_node_index = -1;
+                        s.need_recalc_hovered_node = true;
+                    }
+                    else if (s.selection_add_modifier_down)
                     {
                         s.selected_node_indices.insert(s.hovering_over_node_index); // Add node to selection.
                     }
@@ -424,7 +440,8 @@ namespace Components
                 }
 
                 // Start dragging
-                if (mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && s.selected_node_indices.contains(s.hovering_over_node_index))
+                if (mouse.left.pressed() && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down
+                    && s.hovering_over_node_index != size_t(-1) && s.selected_node_indices.contains(s.hovering_over_node_index))
                 {
                     s.now_dragging_selected_nodes = true;
 
@@ -445,24 +462,37 @@ namespace Components
             {
                 if (mouse.left.up())
                 {
-                    // Released mouse button, determine which nodes should be selected
+                    // Released mouse button, determine which nodes should be selected or erased
                     s.now_creating_rect_selection = false;
 
-                    if (!s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
-                        s.selected_node_indices.clear();
-
-                    for (size_t i = 0; i < circuit.nodes.size(); i++)
+                    auto NodeIsInSelection = [&](const NodeStorage &node)
                     {
-                        const BasicNode &node = *circuit.nodes[i];
-                        ivec2 half_extent = node.GetVisualHalfExtent();
+                        ivec2 half_extent = node->GetVisualHalfExtent();
+                        return (node->pos - half_extent >= s.rect_selection_pos).all() && (node->pos + half_extent < s.rect_selection_pos + s.rect_selection_size).all();
+                    };
 
-                        if ((node.pos - half_extent < s.rect_selection_pos).any() || (node.pos + half_extent >= s.rect_selection_pos + s.rect_selection_size).any())
-                            continue;
+                    if (s.eraser_mode)
+                    {
+                        s.hovering_over_node_index = -1;
+                        s.need_recalc_hovered_node = true;
 
-                        if (s.selection_subtract_modifier_down)
-                            s.selected_node_indices.erase(i);
-                        else
-                            s.selected_node_indices.insert(i);
+                        std::erase_if(circuit.nodes, NodeIsInSelection);
+                    }
+                    else
+                    {
+                        if (!s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
+                            s.selected_node_indices.clear();
+
+                        for (size_t i = 0; i < circuit.nodes.size(); i++)
+                        {
+                            if (!NodeIsInSelection(circuit.nodes[i]))
+                                continue;
+
+                            if (s.selection_subtract_modifier_down)
+                                s.selected_node_indices.erase(i);
+                            else
+                                s.selected_node_indices.insert(i);
+                        }
                     }
                 }
                 else
@@ -557,29 +587,14 @@ namespace Components
             }
         }
 
-        // Add/remove nodes
+        // Add a node
         if (s.fully_extended)
         {
-            if (mouse.left.pressed() && s.mouse_in_window)
+            if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1))
             {
-                if (s.held_node)
-                {
-                    if (s.hovering_over_node_index == size_t(-1))
-                    {
-                        circuit.nodes.push_back(s.held_node);
-                        circuit.nodes.back()->pos = mouse.pos() - s.window_offset + s.view_offset;
-                        s.need_recalc_hovered_node = true;
-                    }
-                }
-                else if (s.eraser_mode)
-                {
-                    if (s.hovering_over_node_index != size_t(-1))
-                    {
-                        circuit.nodes.erase(circuit.nodes.begin() + s.hovering_over_node_index);
-                        s.hovering_over_node_index = -1;
-                        s.need_recalc_hovered_node = true;
-                    }
-                }
+                circuit.nodes.push_back(s.held_node);
+                circuit.nodes.back()->pos = mouse.pos() - s.window_offset + s.view_offset;
+                s.need_recalc_hovered_node = true;
             }
         }
 
@@ -733,7 +748,9 @@ namespace Components
             // Rectangular selection
             if (s.now_creating_rect_selection && s.rect_selection_size != 1)
             {
-                Draw::RectFrame(s.rect_selection_pos - s.view_offset + s.window_offset, s.rect_selection_size, 1, true, fvec3(71,243,255)/255, 173/255.f);
+                fvec4 color = s.eraser_mode ? fvec4(1,55/255.f,0,0.5) : fvec4(71,243,255,173)/255;
+
+                Draw::RectFrame(s.rect_selection_pos - s.view_offset + s.window_offset, s.rect_selection_size, 1, true, color.to_vec3(), color.a);
             }
         }
 
