@@ -29,6 +29,8 @@ namespace Components
 
             return (delta > -half_extent - radius).all() && (delta < half_extent + radius).all();
         }
+
+        static void DrawConnection(ivec2 window_offset, ivec2 pos_src, ivec2 pos_dst, bool is_inverted, bool is_powered, float src_visual_radius);
     };
 
     using NodeStorage = Refl::PolyStorage<BasicNode>;

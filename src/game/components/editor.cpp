@@ -788,7 +788,8 @@ namespace Components
         // Cursor
         if (s.partially_extended)
         {
-            r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center().alpha(smoothstep(pow(s.open_close_state, 1.5)));
+            if (window.HasMouseFocus())
+                r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center().alpha(smoothstep(pow(s.open_close_state, 1.5)));
         }
     }
 
