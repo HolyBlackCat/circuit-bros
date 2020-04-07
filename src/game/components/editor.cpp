@@ -81,6 +81,13 @@ namespace Components
         ivec2 dragging_nodes_initial_click_pos{};
         std::vector<ivec2> dragged_nodes_offsets_to_mouse_pos{}; // The indices match `selected_node_indices`.
 
+        size_t node_connection_src_node_index = -1; // -1 if no node. This is set when clicking any unselected node in selection mode.
+        bool now_creating_node_connection = false; // Then, if stop hovering that node, `now_creating_node_connection` is set to true.
+        int node_connection_src_point_index = -1; // This has indeterminate value if `node_connection_src_node_index == -1`.
+        bool create_inverted_connections = false; // Whether new connections should be inverted.
+
+        std::vector<BasicNode::id_t> recently_deleted_node_ids; // When deleting nodes, their IDs should be added here.
+
         struct Button
         {
             static constexpr GameState any_game_state = GameState::_count;
@@ -417,10 +424,11 @@ namespace Components
                 }
 
                 // Clicked on a node
-                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes)
+                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes && !s.now_creating_node_connection)
                 {
                     if (s.eraser_mode)
                     {
+                        s.recently_deleted_node_ids.push_back(circuit.nodes[s.hovering_over_node_index]->id);
                         circuit.nodes.erase(circuit.nodes.begin() + s.hovering_over_node_index);
                         s.hovering_over_node_index = -1;
                         s.need_recalc_hovered_node = true;
@@ -476,7 +484,13 @@ namespace Components
                         s.hovering_over_node_index = -1;
                         s.need_recalc_hovered_node = true;
 
-                        std::erase_if(circuit.nodes, NodeIsInSelection);
+                        std::erase_if(circuit.nodes, [&](const NodeStorage &node)
+                        {
+                            if (!NodeIsInSelection(node))
+                                return false;
+                            s.recently_deleted_node_ids.push_back(node->id);
+                            return true;
+                        });
                     }
                     else
                     {
@@ -587,14 +601,93 @@ namespace Components
             }
         }
 
+        // Creating node connections
+        if (s.fully_extended)
+        {
+            bool can_create_con = !s.held_node && !s.eraser_mode;
+
+            if (can_create_con && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
+            {
+                ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
+
+                if ((s.node_connection_src_point_index = circuit.nodes[s.hovering_over_node_index]->GetClosestConnectionPoint<true>(mouse_abs_pos)) != -1)
+                {
+                    // If successfully found a connection node...
+                    s.node_connection_src_node_index = s.hovering_over_node_index;
+                }
+            }
+
+            if (can_create_con && s.node_connection_src_node_index != size_t(-1) && mouse.left.down() && s.node_connection_src_node_index != s.hovering_over_node_index)
+                s.now_creating_node_connection = true;
+
+            if (mouse.left.up())
+            {
+                if (can_create_con && s.now_creating_node_connection && s.node_connection_src_node_index != size_t(-1)
+                    && s.hovering_over_node_index != size_t(-1) && s.hovering_over_node_index != s.node_connection_src_node_index)
+                {
+                    ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
+
+                    BasicNode &src_node = *circuit.nodes[s.node_connection_src_node_index];
+                    BasicNode &dst_node = *circuit.nodes[s.hovering_over_node_index];
+                    int dst_point_index = dst_node.GetClosestConnectionPoint<false>(mouse_abs_pos);
+                    if (dst_point_index != -1)
+                    {
+                        src_node.Connect(s.node_connection_src_point_index, dst_node, dst_point_index, s.create_inverted_connections);
+                    }
+                }
+
+                s.node_connection_src_node_index = -1;
+                s.now_creating_node_connection = false;
+            }
+        }
+
         // Add a node
         if (s.fully_extended)
         {
             if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1))
             {
-                circuit.nodes.push_back(s.held_node);
-                circuit.nodes.back()->pos = mouse.pos() - s.window_offset + s.view_offset;
+                BasicNode::id_t new_node_id = circuit.nodes.empty() ? 0 : circuit.nodes.back()->id + 1;
+
+                BasicNode &new_node = *circuit.nodes.emplace_back(s.held_node);
+                new_node.pos = mouse.pos() - s.window_offset + s.view_offset;
+                new_node.id = new_node_id;
+
                 s.need_recalc_hovered_node = true;
+            }
+        }
+
+        { // Renormalize nodes, if needed (this must be close to the end of `Tick()`, after all node manipulations)
+            if (s.recently_deleted_node_ids.size() > 0)
+            {
+                // Sort IDs to allow binary search.
+                std::sort(s.recently_deleted_node_ids.begin(), s.recently_deleted_node_ids.end());
+
+                // Check if a node with the specified ID was recently deleted.
+                auto NodeIdWasDeleted = [&](BasicNode::id_t id)
+                {
+                    return std::binary_search(s.recently_deleted_node_ids.begin(), s.recently_deleted_node_ids.end(), id);
+                };
+
+                // For each existing node, remove all connections to nodes that were deleted.
+                for (NodeStorage &node : circuit.nodes)
+                {
+                    int in_points = node->InPointCount();
+                    int out_points = node->OutPointCount();
+
+                    for (int i = 0; i < in_points; i++)
+                    {
+                        BasicNode::InPoint &point = node->GetInPoint(i);
+                        std::erase_if(point.connections, [&](const BasicNode::InPointCon &con){return NodeIdWasDeleted(con.ids.node);});
+                    }
+                    for (int i = 0; i < out_points; i++)
+                    {
+                        BasicNode::OutPoint &point = node->GetOutPoint(i);
+                        std::erase_if(point.connections, [&](const BasicNode::OutPointCon &con){return NodeIdWasDeleted(con.ids.node);});
+                    }
+                }
+
+                // Clear the list of deleted IDs.
+                s.recently_deleted_node_ids.clear();
             }
         }
 
@@ -723,6 +816,37 @@ namespace Components
                     continue;
 
                 node->Render(s.window_offset - s.view_offset);
+            }
+
+            // Render node connections
+            for (const NodeStorage &node_ptr : circuit.nodes)
+            {
+                const BasicNode &src_node = *node_ptr;
+
+                int src_point_count = src_node.OutPointCount();
+                for (int i = 0; i < src_point_count; i++)
+                {
+                    const BasicNode::OutPoint &src_point = src_node.GetOutPoint(i);
+
+                    for (const BasicNode::OutPointCon &out_con : src_point.connections)
+                    {
+                        const BasicNode &dst_node = *circuit.FindNodeOrThrow(out_con.ids.node);
+                        const BasicNode::InPoint &dst_point = dst_node.GetInPoint(out_con.ids.point);
+
+                        BasicNode::DrawConnection(s.window_offset, src_node.pos + src_point.info->offset_to_node - s.view_offset, dst_node.pos + dst_point.info->offset_to_node - s.view_offset,
+                            out_con.is_inverted, out_con.is_powered, src_point.info->visual_radius + src_point.info->extra_out_visual_radius, dst_point.info->visual_radius);
+                    }
+                }
+            }
+
+            // Render a connection that's being created
+            if (s.now_creating_node_connection)
+            {
+                const BasicNode &src_node = *circuit.nodes[s.node_connection_src_node_index];
+                const BasicNode::OutPoint &src_point = src_node.GetOutPoint(s.node_connection_src_point_index);
+
+                float visual_radius = src_point.info->visual_radius + src_point.info->extra_out_visual_radius;
+                BasicNode::DrawConnection(s.window_offset, src_node.pos + src_point.info->offset_to_node - s.view_offset, mouse.pos() - s.window_offset, s.create_inverted_connections, false, visual_radius, 0);
             }
 
             // Indicators on selected nodes

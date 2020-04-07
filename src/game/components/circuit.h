@@ -1,11 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <vector>
 
 #include "macros/maybe_const.h"
 #include "meta/misc.h"
+#include "program/errors.h"
 #include "reflection/full_with_poly.h"
 #include "reflection/short_macros.h"
 #include "utils/mat.h"
@@ -14,7 +17,10 @@ namespace Components
 {
     STRUCT( BasicNode POLYMORPHIC )
     {
+        using id_t = unsigned int;
+
         MEMBERS(
+            DECL(id_t INIT=0) id // Unique node id.
             DECL(ivec2 INIT{}) pos
             DECL(bool INIT=false) powered
         )
@@ -30,7 +36,117 @@ namespace Components
             return (delta > -half_extent - radius).all() && (delta < half_extent + radius).all();
         }
 
-        static void DrawConnection(ivec2 window_offset, ivec2 pos_src, ivec2 pos_dst, bool is_inverted, bool is_powered, float src_visual_radius);
+        static void DrawConnection(ivec2 window_offset, ivec2 pos_src, ivec2 pos_dst, bool is_inverted, bool is_powered, float src_visual_radius, float dst_visual_radius);
+
+
+        SIMPLE_STRUCT_WITHOUT_NAMES( NodeAndPointId
+            DECL(id_t INIT=0) node
+            DECL(int INIT=0) point
+            VERBATIM
+            [[nodiscard]] bool operator==(const NodeAndPointId &other) const {return node == other.node && point == other.point;}
+            [[nodiscard]] bool operator!=(const NodeAndPointId &other) const {return !(*this == other);}
+        )
+
+        struct PointInfo
+        {
+            ivec2 offset_to_node{};
+            ivec2 half_extent = ivec2(16);
+            float visual_radius = 4;
+            float extra_out_visual_radius = 3; // This is added to visual radius of 'out' connections.
+
+            [[nodiscard]] static const PointInfo &Default()
+            {
+                // I wanted to make this a static variable in `BasicNode`, but Clang has a bug that doesn't let you do that.
+                static constexpr PointInfo ret{};
+                return ret;
+            }
+        };
+
+        SIMPLE_STRUCT_WITHOUT_NAMES( InPointCon
+            DECL(NodeAndPointId) ids
+            VERBATIM
+            InPointCon() {} // Reflection needs a default constructor.
+            InPointCon(const NodeAndPointId &ids) : ids(ids) {}
+        )
+        SIMPLE_STRUCT_WITHOUT_NAMES( InPoint
+            DECL(std::vector<InPointCon>) connections
+            VERBATIM
+            const PointInfo *info = &PointInfo::Default();
+            InPoint() {}
+            InPoint(const PointInfo *info) : info(info) {}
+        )
+
+        SIMPLE_STRUCT_WITHOUT_NAMES( OutPointCon
+            DECL(NodeAndPointId) ids
+            DECL(bool INIT=false) is_powered // Whether the connection is powered (possibly after inversion).
+            DECL(bool INIT=false) is_inverted
+            VERBATIM
+            OutPointCon() {} // Reflection needs a default constructor.
+            OutPointCon(const NodeAndPointId &ids, bool is_powered) : ids(ids), is_powered(is_powered) {}
+        )
+        SIMPLE_STRUCT_WITHOUT_NAMES( OutPoint
+            DECL(std::vector<OutPointCon>) connections
+            VERBATIM
+            const PointInfo *info = &PointInfo::Default();
+            OutPoint() {}
+            OutPoint(const PointInfo *info) : info(info) {}
+        )
+
+        virtual int InPointCount() const = 0;
+        virtual int OutPointCount() const = 0;
+      private:
+        virtual InPoint &GetInPointLow(int index) = 0;
+        virtual OutPoint &GetOutPointLow(int index) = 0;
+      public:
+        MAYBE_CONST(
+            CV InPoint &GetInPoint(int index) CV
+            {
+                DebugAssert("Node connection point index is out of range.", index < InPointCount());
+                return const_cast<BasicNode *>(this)->GetInPointLow(index);
+            }
+            CV OutPoint &GetOutPoint(int index) CV
+            {
+                DebugAssert("Node connection point index is out of range.", index < OutPointCount());
+                return const_cast<BasicNode *>(this)->GetOutPointLow(index);
+            }
+        )
+        // This function can be used to determine if some 'in' and 'out' points visually overlap.
+        // Given an index of an 'in' point, this returns the index of the overlapping 'out' point, or -1 if there is no overlap.
+        virtual int GetOutPointOverlappingInPoint(int in_point_index) const {(void)in_point_index; return -1;}
+        // Given an index of an 'out' point, this returns the index of the overlapping 'in' point, or -1 if there is no overlap.
+        // The overlapping-ness relationship MUST be symmetric.
+        virtual int GetInPointOverlappingOutPoint(int out_point_index) const {(void)out_point_index; return -1;}
+
+        void Connect(int src_point_index, BasicNode &target, int dst_point_index, bool is_inverted);
+
+        // Returns point index, or -1 on failure.
+        template <bool Out>
+        [[nodiscard]] int GetClosestConnectionPoint(ivec2 point) const
+        {
+            ivec2 offset_to_node = point - pos;
+            int count = Out ? OutPointCount() : InPointCount();
+
+            int closest_index = -1;
+            int closest_dist_sqr = std::numeric_limits<int>::max();
+
+            for (int i = 0; i < count; i++)
+            {
+                const PointInfo &info = Out ? *GetOutPoint(i).info : *GetInPoint(i).info;
+
+                ivec2 delta = offset_to_node - info.offset_to_node;
+                if ((delta.abs() > info.half_extent).any())
+                    continue;
+
+                int this_dist_sqr = delta.len_sqr();
+                if (this_dist_sqr < closest_dist_sqr)
+                {
+                    closest_dist_sqr = this_dist_sqr;
+                    closest_index = i;
+                }
+            }
+
+            return closest_index;
+        }
     };
 
     using NodeStorage = Refl::PolyStorage<BasicNode>;
@@ -38,6 +154,26 @@ namespace Components
     class Circuit
     {
       public:
+        // Nodes MUST be sorted by `id`.
         std::vector<NodeStorage> nodes;
+
+        MAYBE_CONST(
+            // Returns null if no such node.
+            CV NodeStorage *FindNodeIfExists(BasicNode::id_t id) CV
+            {
+                auto it = std::lower_bound(nodes.begin(), nodes.end(), id, [](const NodeStorage &node, BasicNode::id_t id){return node->id < id;});
+                if (it == nodes.end() || (*it)->id != id)
+                    return nullptr;
+                return &*it;
+            }
+            // Throws if no such node.
+            CV NodeStorage &FindNodeOrThrow(BasicNode::id_t id) CV
+            {
+                CV NodeStorage *ret = FindNodeIfExists(id);
+                if (!ret)
+                    Program::Error("Invalid node id: ", id, ".");
+                return *ret;
+            }
+        )
     };
 }
