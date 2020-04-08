@@ -86,6 +86,13 @@ namespace Components
         int node_connection_src_point_index = -1; // This has indeterminate value if `node_connection_src_node_index == -1`.
         bool create_inverted_connections = false; // Whether new connections should be inverted.
 
+        size_t erasing_node_connection_node_index = -1; // -1 if no node. This is set when clicking a node in eraser mode.
+        int erasing_node_connection_point_index = -1; // -1 if no node or no point. Set when clicking a node in eraser mode.
+        bool erasing_node_connection_point_type_is_out = false; // Same, but can sometimes be updated when selecting a connection, if the points overlap.
+        int erasing_node_connection_con_index = -1; // Continuously updated when selecting a connection to be erased (can be -1 if no connection), otherwise -1.
+        fvec2 erasing_node_connection_pos_a{}, erasing_node_connection_pos_b{}; // Those are set only when `erasing_node_connection_con_index != -1`.
+        bool now_erasing_connections_instead_of_nodes = false; // Has a meaningful value only if `(mouse.left.down() || mouse.left.released()) && eraser_mode`.
+
         std::vector<BasicNode::id_t> recently_deleted_node_ids; // When deleting nodes, their IDs should be added here.
 
         struct Button
@@ -221,9 +228,15 @@ namespace Components
         {
             s.now_dragging_view = false;
             s.view_offset_vel = fvec2(0);
+
             s.now_creating_rect_selection = false;
+
             s.now_dragging_selected_nodes = false;
             s.dragged_nodes_offsets_to_mouse_pos = std::vector<ivec2>{};
+
+            s.now_creating_node_connection = false;
+            s.node_connection_src_node_index = -1;
+            s.erasing_node_connection_node_index = -1;
         }
 
         // Do things if just opened
@@ -402,7 +415,7 @@ namespace Components
             }
         }
 
-        // Selection
+        // Selection (and erasing nodes)
         if (s.fully_extended)
         {
             ivec2 abs_mouse_pos = mouse.pos() - s.window_offset + s.view_offset;
@@ -428,10 +441,13 @@ namespace Components
                 {
                     if (s.eraser_mode)
                     {
-                        s.recently_deleted_node_ids.push_back(circuit.nodes[s.hovering_over_node_index]->id);
-                        circuit.nodes.erase(circuit.nodes.begin() + s.hovering_over_node_index);
-                        s.hovering_over_node_index = -1;
-                        s.need_recalc_hovered_node = true;
+                        if (!s.now_erasing_connections_instead_of_nodes) // If not erasing a connection...
+                        {
+                            s.recently_deleted_node_ids.push_back(circuit.nodes[s.hovering_over_node_index]->id);
+                            circuit.nodes.erase(circuit.nodes.begin() + s.hovering_over_node_index);
+                            s.hovering_over_node_index = -1;
+                            s.need_recalc_hovered_node = true;
+                        }
                     }
                     else if (s.selection_add_modifier_down)
                     {
@@ -610,7 +626,7 @@ namespace Components
             {
                 ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
-                if ((s.node_connection_src_point_index = circuit.nodes[s.hovering_over_node_index]->GetClosestConnectionPoint<true>(mouse_abs_pos)) != -1)
+                if ((s.node_connection_src_point_index = circuit.nodes[s.hovering_over_node_index]->GetClosestConnectionPoint<BasicNode::Dir::out>(mouse_abs_pos)) != -1)
                 {
                     // If successfully found a connection node...
                     s.node_connection_src_node_index = s.hovering_over_node_index;
@@ -629,7 +645,7 @@ namespace Components
 
                     BasicNode &src_node = *circuit.nodes[s.node_connection_src_node_index];
                     BasicNode &dst_node = *circuit.nodes[s.hovering_over_node_index];
-                    int dst_point_index = dst_node.GetClosestConnectionPoint<false>(mouse_abs_pos);
+                    int dst_point_index = dst_node.GetClosestConnectionPoint<BasicNode::Dir::in>(mouse_abs_pos);
                     if (dst_point_index != -1)
                     {
                         src_node.Connect(s.node_connection_src_point_index, dst_node, dst_point_index, s.create_inverted_connections);
@@ -638,6 +654,99 @@ namespace Components
 
                 s.node_connection_src_node_index = -1;
                 s.now_creating_node_connection = false;
+            }
+        }
+
+        // Erasing node connections
+        if (s.fully_extended)
+        {
+            ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
+
+            if (s.eraser_mode && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1))
+            {
+                s.now_erasing_connections_instead_of_nodes = false;
+
+                s.erasing_node_connection_point_index = circuit.nodes[s.hovering_over_node_index]->GetClosestConnectionPoint<BasicNode::Dir::in_out>(mouse_abs_pos, &s.erasing_node_connection_point_type_is_out);
+                if (s.erasing_node_connection_point_index != -1)
+                {
+                    // If successfully found a connection point...
+                    s.erasing_node_connection_node_index = s.hovering_over_node_index;
+                    s.erasing_node_connection_con_index = -1;
+                }
+            }
+
+            if (s.eraser_mode && s.erasing_node_connection_node_index != size_t(-1) && mouse.left.down())
+            {
+                s.erasing_node_connection_con_index = -1;
+
+                if (s.erasing_node_connection_node_index != s.hovering_over_node_index)
+                {
+                    s.now_erasing_connections_instead_of_nodes = true;
+
+                    const BasicNode &node = *circuit.nodes[s.erasing_node_connection_node_index];
+
+                    float dist_to_nearest_con = 10; // Minimal distance to connection.
+
+                    auto UpdateSelectedCon = [&](bool is_out, int point_index)
+                    {
+                        Meta::with_cexpr_flags(is_out) >> [&](auto is_out_tag)
+                        {
+                            constexpr bool is_out = is_out_tag.value;
+
+                            const auto &point = node.GetInOrOutPoint<is_out>(point_index);
+
+                            for (int con_index = 0; con_index < int(point.connections.size()); con_index++)
+                            {
+                                const BasicNode::NodeAndPointId &remote_ids = point.connections[con_index].ids;
+
+                                const BasicNode &remote_node = *circuit.FindNodeOrThrow(remote_ids.node);
+                                const auto &remote_point = remote_node.GetInOrOutPoint<!is_out>(remote_ids.point);
+
+                                ivec2 a = node.pos + point.info->offset_to_node;
+                                ivec2 b = remote_node.pos + remote_point.info->offset_to_node;
+                                fvec2 dir = fvec2(b - a).norm();
+                                if (fvec2(mouse_abs_pos - a) /dot/ dir <= 0)
+                                    continue;
+
+                                fvec2 normal = dir.rot90();
+
+                                float dist = abs(fvec2(mouse_abs_pos - a) /dot/ normal);
+                                if (dist < dist_to_nearest_con)
+                                {
+                                    // Update the nearest connection info.
+                                    dist_to_nearest_con = dist;
+                                    s.erasing_node_connection_con_index = con_index;
+                                    s.erasing_node_connection_pos_a = a + dir * point.info->visual_radius; // Note that we don't add `extra_out_visual_radius` here, it looks better without it.
+                                    s.erasing_node_connection_pos_b = b - dir * remote_point.info->visual_radius; // ^
+
+                                    // Yeah, we also need to set those because of how we handle overlapping connection points.
+                                    s.erasing_node_connection_point_index = point_index;
+                                    s.erasing_node_connection_point_type_is_out = is_out;
+                                }
+                            }
+                        };
+                    };
+
+                    UpdateSelectedCon(s.erasing_node_connection_point_type_is_out, s.erasing_node_connection_point_index);
+
+                    int overlapping_point_index = s.erasing_node_connection_point_type_is_out ? node.GetInPointOverlappingOutPoint(s.erasing_node_connection_point_index)
+                                                                                              : node.GetOutPointOverlappingInPoint(s.erasing_node_connection_point_index);
+                    if (overlapping_point_index != -1)
+                        UpdateSelectedCon(!s.erasing_node_connection_point_type_is_out, overlapping_point_index);
+                }
+            }
+
+            if (mouse.left.up())
+            {
+                if (s.eraser_mode && s.erasing_node_connection_node_index != size_t(-1) && s.erasing_node_connection_con_index != -1)
+                {
+                    BasicNode &node = *circuit.nodes[s.erasing_node_connection_node_index];
+                    node.Disconnect(circuit, s.erasing_node_connection_point_index, s.erasing_node_connection_point_type_is_out, s.erasing_node_connection_con_index);
+                }
+
+                s.erasing_node_connection_node_index = -1;
+                s.erasing_node_connection_point_index = -1;
+                s.erasing_node_connection_con_index = -1;
             }
         }
 
@@ -859,7 +968,8 @@ namespace Components
             }
 
             // Indicator on a hovered node
-            if (s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes)
+            if (s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes
+                && (!s.eraser_mode || mouse.left.up() || !s.now_erasing_connections_instead_of_nodes))
             {
                 const BasicNode &node = *circuit.nodes[s.hovering_over_node_index];
                 ivec2 half_extent = node.GetVisualHalfExtent() + 3;
@@ -867,6 +977,23 @@ namespace Components
                 fvec4 color = s.held_node || s.eraser_mode ? fvec4(1,55/255.f,0,0.5) : fvec4(0,81,255,100)/255.f;
 
                 Draw::RectFrame(s.window_offset + node.pos - s.view_offset - half_extent+1, half_extent*2-1, 1, true, color.to_vec3(), color.a);
+            }
+
+            // Indicator on a hovered connection (when in eraser mode)
+            if (s.eraser_mode && s.erasing_node_connection_node_index != size_t(-1) && s.erasing_node_connection_con_index != -1)
+            {
+                constexpr float half_size = 2;
+                constexpr fvec3 frame_color(1,55/255.f,0);
+                constexpr float frame_alpha = 0.5;
+
+                fvec2 a = s.erasing_node_connection_pos_a - s.view_offset + s.window_offset;
+                fvec2 b = s.erasing_node_connection_pos_b - s.view_offset + s.window_offset;
+                fvec2 delta = b - a;
+                float dist = clamp_min(delta.len(), 1);
+                fvec2 dir = delta / dist;
+                fvec2 normal = dir.rot90();
+
+                r.fquad(a + 0.5, fvec2(dist, half_size * 2 - 1)).center(fvec2(0, half_size - 0.5)).matrix(fmat2(dir, normal)).color(frame_color).alpha(frame_alpha);
             }
 
             // Rectangular selection

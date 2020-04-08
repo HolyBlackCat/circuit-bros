@@ -15,6 +15,8 @@
 
 namespace Components
 {
+    class Circuit;
+
     STRUCT( BasicNode POLYMORPHIC )
     {
         using id_t = unsigned int;
@@ -40,8 +42,8 @@ namespace Components
 
 
         SIMPLE_STRUCT_WITHOUT_NAMES( NodeAndPointId
-            DECL(id_t INIT=0) node
-            DECL(int INIT=0) point
+            DECL(id_t INIT=0) node // `id` (NOT index!) of the target node.
+            DECL(int INIT=0) point // Index of the target point.
             VERBATIM
             [[nodiscard]] bool operator==(const NodeAndPointId &other) const {return node == other.node && point == other.point;}
             [[nodiscard]] bool operator!=(const NodeAndPointId &other) const {return !(*this == other);}
@@ -82,7 +84,7 @@ namespace Components
             DECL(bool INIT=false) is_inverted
             VERBATIM
             OutPointCon() {} // Reflection needs a default constructor.
-            OutPointCon(const NodeAndPointId &ids, bool is_powered) : ids(ids), is_powered(is_powered) {}
+            OutPointCon(const NodeAndPointId &ids, bool is_inverted) : ids(ids), is_inverted(is_inverted) {}
         )
         SIMPLE_STRUCT_WITHOUT_NAMES( OutPoint
             DECL(std::vector<OutPointCon>) connections
@@ -109,6 +111,13 @@ namespace Components
                 DebugAssert("Node connection point index is out of range.", index < OutPointCount());
                 return const_cast<BasicNode *>(this)->GetOutPointLow(index);
             }
+            template <bool IsOut> CV std::conditional_t<IsOut, OutPoint, InPoint> &GetInOrOutPoint(int index) CV
+            {
+                if constexpr (IsOut)
+                    return GetOutPoint(index);
+                else
+                    return GetInPoint(index);
+            }
         )
         // This function can be used to determine if some 'in' and 'out' points visually overlap.
         // Given an index of an 'in' point, this returns the index of the overlapping 'out' point, or -1 if there is no overlap.
@@ -117,31 +126,40 @@ namespace Components
         // The overlapping-ness relationship MUST be symmetric.
         virtual int GetInPointOverlappingOutPoint(int out_point_index) const {(void)out_point_index; return -1;}
 
-        void Connect(int src_point_index, BasicNode &target, int dst_point_index, bool is_inverted);
+        void Connect(int src_point_index, BasicNode &target, int dst_point_index, bool &is_inverted);
+        void Disconnect(Circuit &circuit, int src_point_index, bool src_point_is_out, int src_con_index);
 
         // Returns point index, or -1 on failure.
-        template <bool Out>
-        [[nodiscard]] int GetClosestConnectionPoint(ivec2 point) const
+        enum class Dir {in, out, in_out};
+        template <Dir PointDir>
+        [[nodiscard]] int GetClosestConnectionPoint(ivec2 point, bool *closest_point_dir_is_out = nullptr) const
         {
             ivec2 offset_to_node = point - pos;
-            int count = Out ? OutPointCount() : InPointCount();
 
             int closest_index = -1;
             int closest_dist_sqr = std::numeric_limits<int>::max();
 
-            for (int i = 0; i < count; i++)
+            for (int mode_is_out = 0; mode_is_out < 2; mode_is_out++)
             {
-                const PointInfo &info = Out ? *GetOutPoint(i).info : *GetInPoint(i).info;
+                if (PointDir == Dir::in && mode_is_out == true) continue;
+                if (PointDir == Dir::out && mode_is_out == false) continue;
 
-                ivec2 delta = offset_to_node - info.offset_to_node;
-                if ((delta.abs() > info.half_extent).any())
-                    continue;
-
-                int this_dist_sqr = delta.len_sqr();
-                if (this_dist_sqr < closest_dist_sqr)
+                for (int count = mode_is_out ? OutPointCount() : InPointCount(), i = 0; i < count; i++)
                 {
-                    closest_dist_sqr = this_dist_sqr;
-                    closest_index = i;
+                    const PointInfo &info = mode_is_out ? *GetOutPoint(i).info : *GetInPoint(i).info;
+
+                    ivec2 delta = offset_to_node - info.offset_to_node;
+                    if ((delta.abs() > info.half_extent).any())
+                        continue;
+
+                    int this_dist_sqr = delta.len_sqr();
+                    if (this_dist_sqr < closest_dist_sqr)
+                    {
+                        closest_dist_sqr = this_dist_sqr;
+                        closest_index = i;
+                        if (closest_point_dir_is_out)
+                            *closest_point_dir_is_out = mode_is_out;
+                    }
                 }
             }
 

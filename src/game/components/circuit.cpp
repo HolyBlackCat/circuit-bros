@@ -3,6 +3,7 @@
 #include "game/draw.h"
 #include "game/main.h"
 #include "macros/adjust.h"
+#include "meta/misc.h"
 
 namespace Components
 {
@@ -43,7 +44,7 @@ namespace Components
 
         STRUCT( And EXTENDS BasicNode )
         {
-            inline static const PointInfo point_info = adjust_(PointInfo::Default(), visual_radius = 5);
+            inline static const PointInfo point_info = adjust_(PointInfo::Default(), visual_radius = 5.18);
 
             MEMBERS(
                 DECL(InPoint INIT=&point_info) in
@@ -128,7 +129,7 @@ namespace Components
         }
     }
 
-    void BasicNode::Connect(int src_out_point_index, BasicNode &target, int dst_in_point_index, bool is_inverted)
+    void BasicNode::Connect(int src_out_point_index, BasicNode &target, int dst_in_point_index, bool &is_inverted)
     {
         DebugAssertNameless(src_out_point_index < OutPointCount());
         DebugAssertNameless(dst_in_point_index < target.InPointCount());
@@ -140,8 +141,11 @@ namespace Components
 
         // Destroy the old connection, if any.
         auto HasIdsEqualTo = [](BasicNode::NodeAndPointId ids){return [ids](const auto &obj){return obj.ids == ids;};};
-        std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids));
-        std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids));
+        bool already_had_con = std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids)) > 0
+                            && std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids)) > 0;
+        // If already had a connection, flip the inverted-ness.
+        if (already_had_con)
+            is_inverted = !is_inverted;
 
         // Destroy the overlapping connection in the opposite direction, if any.
         int src_ov_in_point_index = GetInPointOverlappingOutPoint(src_out_point_index);
@@ -160,5 +164,28 @@ namespace Components
         // Add the connection.
         src_point.connections.push_back(OutPointCon(dst_ids, is_inverted));
         dst_point.connections.push_back(InPointCon(src_ids));
+    }
+
+    void BasicNode::Disconnect(Circuit &circuit, int src_point_index, bool src_point_is_out, int src_con_index)
+    {
+        Meta::with_cexpr_flags(src_point_is_out) >> [&](auto is_out_tag)
+        {
+            constexpr bool is_out = is_out_tag.value;
+
+            auto &src_point = GetInOrOutPoint<is_out>(src_point_index);
+
+            DebugAssertNameless(src_con_index < int(src_point.connections.size()));
+            auto &src_con = src_point.connections[src_con_index];
+
+            const NodeAndPointId src_ids{id, src_point_index};
+            const NodeAndPointId &dst_ids = src_con.ids;
+
+            BasicNode &dst_node = *circuit.FindNodeOrThrow(dst_ids.node);
+            auto &dst_point = dst_node.GetInOrOutPoint<!is_out>(dst_ids.point);
+
+            auto HasIdsEqualTo = [](BasicNode::NodeAndPointId ids){return [ids](const auto &obj){return obj.ids == ids;};};
+            std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids));
+            std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids));
+        };
     }
 }
