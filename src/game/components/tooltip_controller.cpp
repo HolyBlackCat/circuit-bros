@@ -1,6 +1,7 @@
 #include "tooltip_controller.h"
 
 #include "game/draw.h"
+#include "game/gui_colors.h"
 #include "game/main.h"
 #include "reflection/full_with_poly.h"
 
@@ -52,9 +53,6 @@ namespace Components
     }
     void TooltipController::Render() const
     {
-        constexpr fvec3 color_text(1), color_bg(0), color_border(0.2,0.5,1);
-        constexpr float alpha_text = 1, alpha_bg = 0.5, alpha_border = 0.8;
-
         constexpr ivec2 offset(2,2);
         constexpr int screen_edge_min_dist = 2;
 
@@ -66,11 +64,11 @@ namespace Components
             clamp_var(pos, -screen_size/2 + s.padding_around_text_a + screen_edge_min_dist, screen_size/2 - s.tooltip_text_stats.size - s.padding_around_text_b - screen_edge_min_dist);
 
             // Background
-            r.iquad(pos - s.padding_around_text_a, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b).color(color_bg).alpha(alpha_bg);
+            r.iquad(pos - s.padding_around_text_a, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b).color(GuiColors::color_bg).alpha(GuiColors::alpha_bg);
             // Frame
-            Draw::RectFrame(pos - s.padding_around_text_a - 1, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b + 2, 1, false, color_border, alpha_border);
+            Draw::RectFrame(pos - s.padding_around_text_a - 1, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b + 2, 1, false, GuiColors::color_border, GuiColors::alpha_border);
             // Text
-            r.itext(pos, s.tooltip_text).align(ivec2(-1,-1),-1).color(color_text).alpha(alpha_text);
+            r.itext(pos, s.tooltip_text).align(ivec2(-1,-1),-1).color(GuiColors::color_text).alpha(GuiColors::alpha_text);
         }
     }
 

@@ -839,7 +839,8 @@ namespace Components
         if (s.partially_extended)
         {
             constexpr int cell_size = 32, sub_cell_count = 4;
-            constexpr fvec3 grid_color(0,0.5,1);
+            // constexpr fvec3 grid_color(0,0.5,1);
+            constexpr fvec3 grid_color(0.1,0.2,0.5);
             constexpr float grid_alpha = 0.25, grid_alpha_alt = 0.5;
 
             auto GetLineAlpha = [&](int index) {return index % sub_cell_count == 0 ? grid_alpha_alt : grid_alpha;};

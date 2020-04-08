@@ -108,9 +108,10 @@ namespace Components
                 clamp_var_max(src_visual_radius, max_visual_radius);
 
                 a += dir * src_visual_radius;
-                src_deco_pos = a;
                 if (is_inverted)
-                    a += dir * 2.3;
+                    a += dir * 1;
+                src_deco_pos = a;
+                a += dir * (is_inverted ? 2.3 : 1);
             }
 
             if (dst_visible)
@@ -139,13 +140,17 @@ namespace Components
         NodeAndPointId src_ids{id, src_out_point_index};
         NodeAndPointId dst_ids{target.id, dst_in_point_index};
 
-        // Destroy the old connection, if any.
         auto HasIdsEqualTo = [](BasicNode::NodeAndPointId ids){return [ids](const auto &obj){return obj.ids == ids;};};
-        bool already_had_con = std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids)) > 0
-                            && std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids)) > 0;
-        // If already had a connection, flip the inverted-ness.
-        if (already_had_con)
-            is_inverted = !is_inverted;
+
+        { // If a connection already exists, consider flipping the inverted-ness.
+            auto it = std::find_if(src_point.connections.begin(), src_point.connections.end(), HasIdsEqualTo(dst_ids));
+            if (it != src_point.connections.end() && it->is_inverted == is_inverted)
+                is_inverted = !is_inverted;
+        }
+
+        // Destroy the old connection, if any.
+        std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids));
+        std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids));
 
         // Destroy the overlapping connection in the opposite direction, if any.
         int src_ov_in_point_index = GetInPointOverlappingOutPoint(src_out_point_index);
