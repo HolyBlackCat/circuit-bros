@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "game/components/circuit.h"
+#include "game/components/menu_controller.h"
 #include "game/components/tooltip_controller.h"
 
 namespace Components
@@ -14,9 +15,8 @@ namespace Components
 
       public:
         Editor();
-        Editor(const Editor &);
         Editor(Editor &&) noexcept;
-        Editor &operator=(Editor) noexcept;
+        Editor &operator=(Editor &&) noexcept;
         ~Editor();
 
         [[nodiscard]] bool IsOpen() const;
@@ -25,7 +25,8 @@ namespace Components
         enum class GameState {stopped, playing, paused, _count};
         GameState GetState() const;
 
-        void Tick(Circuit &circuit, TooltipController &tooltip_controller);
+        void Tick(Circuit &circuit, MenuController &menu_controller, TooltipController &tooltip_controller);
         void Render(const Circuit &circuit) const;
+        void RenderCursor() const;
     };
 }

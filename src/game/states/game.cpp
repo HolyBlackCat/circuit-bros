@@ -1,5 +1,6 @@
 #include "game/components/circuit.h"
 #include "game/components/editor.h"
+#include "game/components/menu_controller.h"
 #include "game/components/tooltip_controller.h"
 #include "game/main.h"
 #include "game/map.h"
@@ -23,6 +24,7 @@ namespace States
         Components::Circuit circuit;
         Components::Editor editor;
         Components::TooltipController tooltip_controller;
+        Components::MenuController menu_controller;
 
         Game() : map("assets/maps/1.json") {}
 
@@ -32,10 +34,11 @@ namespace States
 
             // ImGui::ShowDemoWindow();
 
-            editor.Tick(circuit, tooltip_controller);
+            editor.Tick(circuit, menu_controller, tooltip_controller);
             if (Input::Button(Input::tab).pressed())
                 editor.SetOpen(!editor.IsOpen());
 
+            menu_controller.Tick(&tooltip_controller);
             tooltip_controller.Tick();
         }
 
@@ -50,7 +53,9 @@ namespace States
 
             map.Render(Meta::value_tag<0>{}, ivec2(200,50));
             editor.Render(circuit);
+            menu_controller.Render();
             tooltip_controller.Render();
+            editor.RenderCursor();
 
             r.Finish();
         }

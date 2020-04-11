@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <string_view>
 
 #include "game/main.h"
@@ -26,6 +27,7 @@ namespace Components
         // Show tooltip with the specified text.
         // The tooltip will be removed when user moves mouse.
         void SetTooptip(ivec2 pos, std::string text);
+        void RemoveTooltipAndResetTimer();
 
         void Tick();
         void Render() const;

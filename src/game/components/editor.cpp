@@ -191,9 +191,8 @@ namespace Components
     };
 
     Editor::Editor() : state(std::make_unique<State>()) {}
-    Editor::Editor(const Editor &other) : state(std::make_unique<State>(*other.state)) {}
     Editor::Editor(Editor &&other) noexcept : state(std::move(other.state)) {}
-    Editor &Editor::operator=(Editor other) noexcept {std::swap(state, other.state); return *this;}
+    Editor &Editor::operator=(Editor &&other) noexcept {state = std::move(other.state); return *this;}
     Editor::~Editor() = default;
 
     bool Editor::IsOpen() const
@@ -211,7 +210,7 @@ namespace Components
         return state->game_state;
     }
 
-    void Editor::Tick(Circuit &circuit, TooltipController &tooltip_controller)
+    void Editor::Tick(Circuit &circuit, MenuController &menu_controller, TooltipController &tooltip_controller)
     {
         static constexpr float open_close_state_step = 0.025;
 
@@ -237,6 +236,9 @@ namespace Components
             s.now_creating_node_connection = false;
             s.node_connection_src_node_index = -1;
             s.erasing_node_connection_node_index = -1;
+
+            menu_controller.RemoveMenu();
+            tooltip_controller.RemoveTooltipAndResetTimer();
         }
 
         // Do things if just opened
@@ -1036,6 +1038,11 @@ namespace Components
         // Frame
         if (s.partially_extended)
             r.iquad(s.frame_offset, s.atlas.editor_frame).center();
+    }
+
+    void Editor::RenderCursor() const
+    {
+        const State &s = *state;
 
         // Cursor
         if (s.partially_extended)

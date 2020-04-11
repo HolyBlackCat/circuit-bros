@@ -1,16 +1,13 @@
 #include "tooltip_controller.h"
 
 #include "game/draw.h"
-#include "game/gui_colors.h"
+#include "game/gui_style.h"
 #include "game/main.h"
-#include "reflection/full_with_poly.h"
 
 namespace Components
 {
     struct TooltipController::State
     {
-        static constexpr ivec2 padding_around_text_a = ivec2(2, 1), padding_around_text_b = ivec2(1, 1);
-
         int ticks_since_mouse_moved = 0;
 
         bool show_tooltip = false;
@@ -37,6 +34,14 @@ namespace Components
         state->tooltip_text = Graphics::Text(font_main(), text);
         state->tooltip_text_stats = state->tooltip_text.ComputeStats();
     }
+    void TooltipController::RemoveTooltipAndResetTimer()
+    {
+        State &s = *state;
+        s.ticks_since_mouse_moved = 0;
+        s.show_tooltip = false;
+        s.tooltip_text = Graphics::Text{};
+        s.tooltip_text_stats = Graphics::Text::Stats{};
+    }
 
     void TooltipController::Tick()
     {
@@ -44,31 +49,26 @@ namespace Components
 
         s.ticks_since_mouse_moved++;
         if (mouse.pos_delta())
-        {
-            s.ticks_since_mouse_moved = 0;
-            s.show_tooltip = false;
-            s.tooltip_text = Graphics::Text{};
-            s.tooltip_text_stats = Graphics::Text::Stats{};
-        }
+            RemoveTooltipAndResetTimer();
     }
     void TooltipController::Render() const
     {
         constexpr ivec2 offset(2,2);
-        constexpr int screen_edge_min_dist = 2;
 
         const State &s = *state;
 
         if (s.show_tooltip)
         {
-            ivec2 pos = s.tooltip_pos + s.padding_around_text_a + offset;
-            clamp_var(pos, -screen_size/2 + s.padding_around_text_a + screen_edge_min_dist, screen_size/2 - s.tooltip_text_stats.size - s.padding_around_text_b - screen_edge_min_dist);
+            ivec2 pos = s.tooltip_pos + GuiStyle::padding_around_text_a + offset;
+            clamp_var(pos, -screen_size/2 + GuiStyle::padding_around_text_a + GuiStyle::popup_min_dist_to_screen_edge,
+                      screen_size/2 - s.tooltip_text_stats.size - GuiStyle::padding_around_text_b - GuiStyle::popup_min_dist_to_screen_edge);
 
             // Background
-            r.iquad(pos - s.padding_around_text_a, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b).color(GuiColors::color_bg).alpha(GuiColors::alpha_bg);
+            r.iquad(pos - GuiStyle::padding_around_text_a, s.tooltip_text_stats.size + GuiStyle::padding_around_text_a + GuiStyle::padding_around_text_b).color(GuiStyle::color_bg).alpha(GuiStyle::alpha_bg);
             // Frame
-            Draw::RectFrame(pos - s.padding_around_text_a - 1, s.tooltip_text_stats.size + s.padding_around_text_a + s.padding_around_text_b + 2, 1, false, GuiColors::color_border, GuiColors::alpha_border);
+            Draw::RectFrame(pos - GuiStyle::padding_around_text_a - 1, s.tooltip_text_stats.size + GuiStyle::padding_around_text_a + GuiStyle::padding_around_text_b + 2, 1, false, GuiStyle::color_border, GuiStyle::alpha_border);
             // Text
-            r.itext(pos, s.tooltip_text).align(ivec2(-1,-1),-1).color(GuiColors::color_text).alpha(GuiColors::alpha_text);
+            r.itext(pos, s.tooltip_text).align(ivec2(-1,-1),-1).color(GuiStyle::color_text).alpha(GuiStyle::alpha_text);
         }
     }
 
