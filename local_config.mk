@@ -1,10 +1,10 @@
 ifeq ($(TARGET_OS),windows)
-# `--target=x86_64-w64-windows-gnu` is necessary when using official Clang binaries. Otherwise it should be a no-op.
-# `-femulated-tls` is necessary when using libstdc++'s atomics.
-C_COMPILER   = clang --target=x86_64-w64-windows-gnu -femulated-tls
-CXX_COMPILER = clang++ --target=x86_64-w64-windows-gnu -femulated-tls
-C_LINKER     = clang --target=x86_64-w64-windows-gnu -femulated-tls -fuse-ld=lld
-CXX_LINKER   = clang++ --target=x86_64-w64-windows-gnu -femulated-tls -fuse-ld=lld
+# `-femulated-tls` seems to be necessary when using libstdc++'s atomics on Windows.
+# If using official clang binaries, add `--target=x86_64-w64-windows-gnu`.
+C_COMPILER   = clang -femulated-tls
+CXX_COMPILER = clang++ -femulated-tls
+C_LINKER     = clang -femulated-tls -fuse-ld=lld
+CXX_LINKER   = clang++ -femulated-tls -fuse-ld=lld
 else
 C_COMPILER   = clang-9
 CXX_COMPILER = clang++-9
