@@ -29,7 +29,9 @@ namespace Components
                 ButtonTooltip_AddOrGate,
                 ButtonTooltip_AddAndGate,
                 ButtonTooltip_AddOther,
-                ButtonTooltip_Erase
+                ButtonTooltip_Erase,
+                ButtonTooltip_ConnectionMode_Regular,
+                ButtonTooltip_ConnectionMode_Inverted
             VERBATIM Strings() {interface_strings().InitStrings(*this, "Editor/");}
         )
         inline static Strings strings;
@@ -97,70 +99,152 @@ namespace Components
 
         struct Button
         {
-            static constexpr GameState any_game_state = GameState::_count;
-            GameState game_state = any_game_state;
-
             ivec2 pos{}, size{};
             ivec2 tex_pos{};
 
-            bool State::*target = nullptr;
+            using tick_func_t = void(Button &button, State &state, TooltipController &tooltip_controller);
+            tick_func_t *tick = nullptr;
 
-            using tooltip_func_t = std::string(const State &s);
-            tooltip_func_t *tooltip_func = nullptr;
+            bool enabled = true;
 
-            enum class ButtonState {normal, hovered, pressed}; // Do not reorder.
-            ButtonState status = ButtonState::normal;
+            enum class Status {normal, hovered, pressed}; // Do not reorder.
+            Status status = Status::normal;
 
             bool mouse_pressed_here = false;
+            bool mouse_released_here_at_this_tick = false;
 
             Button() {}
-            Button(GameState game_state, ivec2 pos, ivec2 size, ivec2 tex_pos, bool State::*target, tooltip_func_t *tooltip_func)
-                : game_state(game_state), pos(pos), size(size), tex_pos(tex_pos), target(target), tooltip_func(tooltip_func)
+
+            Button(ivec2 pos, ivec2 size, ivec2 tex_pos, tick_func_t *tick = nullptr, bool enabled = true)
+                : pos(pos), size(size), tex_pos(tex_pos), tick(tick), enabled(enabled)
             {}
-        };
-        std::vector<Button> buttons;
 
-        bool button_stop = false;
-        bool button_start = false;
-        bool button_step = false;
-        bool button_add_or = false;
-        bool button_add_and = false;
-        bool button_add_other = false;
-        bool button_erase = false;
-
-        State()
-        {
-            auto IndexToTexPos = [](int index)
+            [[nodiscard]] static ivec2 IndexToTexPos(int index)
             {
                 constexpr int wide_button_count = 5;
                 ivec2 ret(6 + 24 * index, 0);
                 if (index >= wide_button_count)
                     ret.x -= (index - wide_button_count) * 4;
                 return ret;
-            };
+            }
 
-            ivec2 pos = -window_size_with_panel/2 + 2;
-            buttons.push_back(Button(GameState::stopped, pos, ivec2(24,20), IndexToTexPos(0), nullptr, nullptr));
-            buttons.push_back(Button(GameState::playing, pos, ivec2(24,20), IndexToTexPos(3), &State::button_stop, [](const State &s){return s.strings.ButtonTooltip_Stop();}));
-            buttons.push_back(Button(GameState::paused, pos, ivec2(24,20), IndexToTexPos(3), &State::button_stop, [](const State &s){return s.strings.ButtonTooltip_Stop();}));
-            pos.x += 24;
-            buttons.push_back(Button(GameState::stopped, pos, ivec2(24,20), IndexToTexPos(1), &State::button_start, [](const State &s){return s.strings.ButtonTooltip_Start();}));
-            buttons.push_back(Button(GameState::playing, pos, ivec2(24,20), IndexToTexPos(2), &State::button_start, [](const State &s){return s.strings.ButtonTooltip_Pause();}));
-            buttons.push_back(Button(GameState::paused, pos, ivec2(24,20), IndexToTexPos(1), &State::button_start, [](const State &s){return s.strings.ButtonTooltip_Continue();}));
-            pos.x += 24;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(24,20), IndexToTexPos(4), &State::button_step, [](const State &s){return s.strings.ButtonTooltip_AdvanceOneTick();}));
-            pos.x += 24;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(6,20), ivec2(0), nullptr, nullptr));
-            pos.x += 6;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(20,20), IndexToTexPos(5), &State::button_add_or, [](const State &s){return s.strings.ButtonTooltip_AddOrGate();}));
-            pos.x += 20;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(20,20), IndexToTexPos(6), &State::button_add_and, [](const State &s){return s.strings.ButtonTooltip_AddAndGate();}));
-            pos.x += 20;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(20,20), IndexToTexPos(7), &State::button_add_other, [](const State &s){return s.strings.ButtonTooltip_AddOther();}));
-            pos.x += 20;
-            buttons.push_back(Button(Button::any_game_state, pos, ivec2(20,20), IndexToTexPos(8), &State::button_erase, [](const State &s){return s.strings.ButtonTooltip_Erase();}));
-            pos.x += 20;
-        }
+            [[nodiscard]] bool IsPressed() const
+            {
+                return mouse_released_here_at_this_tick;
+            }
+
+            // Internal, use in `tick` callback.
+            template <typename F>
+            void TooltipFunc(TooltipController &c, F &&func)
+            {
+                if (status == Status::hovered && c.ShouldShowTooltip())
+                    c.SetTooptip(pos with(y += size.y), std::forward<F>(func)());
+            }
+        };
+
+        struct Buttons
+        {
+            MEMBERS( DECL(Button)
+                stop, start_continue, advance_one_tick,
+                separator1,
+                add_gate_or, add_gate_and, add_gate_other,
+                erase_gate,
+                separator2,
+                toggle_inverted_connections
+            )
+
+            MAYBE_CONST(
+                template <typename F>
+                void ForEachButton(F &&func) CV // `func` is `void func(CV Button &)`.
+                {
+                    Meta::cexpr_for<Refl::Class::member_count<Buttons>>([&](auto index)
+                    {
+                        func(Refl::Class::Member<index.value>(*this));
+                    });
+                }
+            )
+
+            Buttons()
+            {
+                ivec2 pos = -window_size_with_panel/2 + 2;
+
+                stop = Button(pos, ivec2(24,20), Button::IndexToTexPos(0), [](Button &b, State &s, TooltipController &t)
+                {
+                    if (s.game_state == GameState::stopped)
+                    {
+                        b.enabled = false;
+                        b.tex_pos = Button::IndexToTexPos(0);
+                    }
+                    else
+                    {
+                        b.enabled = true;
+                        b.tex_pos = Button::IndexToTexPos(3);
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_Stop();});
+                    }
+                });
+                pos.x += 24;
+                start_continue = Button(pos, ivec2(24,20), Button::IndexToTexPos(1), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.tex_pos = Button::IndexToTexPos(s.game_state == GameState::playing ? 2 : 1);
+                    switch (s.game_state)
+                    {
+                      case GameState::_count:
+                        break; // This shouldn't happen.
+                      case GameState::stopped:
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_Start();});
+                        break;
+                      case GameState::playing:
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_Pause();});
+                        break;
+                      case GameState::paused:
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_Continue();});
+                        break;
+                    }
+                });
+                pos.x += 24;
+                advance_one_tick = Button(pos, ivec2(24,20), Button::IndexToTexPos(4), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_AdvanceOneTick();});
+                });
+                pos.x += 24;
+                separator1 = Button(pos, ivec2(6,20), ivec2(0), nullptr, false);
+                pos.x += 6;
+                add_gate_or = Button(pos, ivec2(20,20), Button::IndexToTexPos(5), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_AddOrGate();});
+                });
+                pos.x += 20;
+                add_gate_and = Button(pos, ivec2(20,20), Button::IndexToTexPos(6), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_AddAndGate();});
+                });
+                pos.x += 20;
+                add_gate_other = Button(pos, ivec2(20,20), Button::IndexToTexPos(7), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_AddOther();});
+                });
+                pos.x += 20;
+                erase_gate = Button(pos, ivec2(20,20), Button::IndexToTexPos(8), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_Erase();});
+                });
+                pos.x += 20;
+                separator2 = Button(pos, ivec2(6,20), ivec2(0), nullptr, false);
+                pos.x += 6;
+                toggle_inverted_connections = Button(pos, ivec2(20,20), Button::IndexToTexPos(9), [](Button &b, State &s, TooltipController &t)
+                {
+                    b.tex_pos = Button::IndexToTexPos(s.create_inverted_connections ? 10 : 9);
+                    if (s.create_inverted_connections)
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_ConnectionMode_Inverted();});
+                    else
+                        b.TooltipFunc(t,[&]{return s.strings.ButtonTooltip_ConnectionMode_Regular();});
+                });
+                pos.x += 20;
+            }
+        };
+        Buttons buttons;
+
+        State() {}
 
         // Returns -1 if we don't hover over a node.
         size_t CalcHoveredNodeIndex(const std::vector<NodeStorage> &nodes, ivec2 radius) const
@@ -322,33 +406,29 @@ namespace Components
         // Buttons
         if (s.fully_extended)
         {
-            for (State::Button &button : s.buttons)
+            s.buttons.ForEachButton([&](State::Button &button)
             {
-                // Skip if in wrong state.
-                if (button.game_state != button.any_game_state && button.game_state != s.game_state)
+                if (button.tick)
+                    button.tick(button, s, tooltip_controller);
+
+                button.mouse_released_here_at_this_tick = false;
+
+                // Skip if disabled.
+                if (!button.enabled)
                 {
+                    button.status = State::Button::Status::normal;
                     button.mouse_pressed_here = false;
-                    button.status = State::Button::ButtonState::normal;
-                    continue;
+                    button.mouse_released_here_at_this_tick = false;
+                    return;
                 }
 
-                // Skip if not pressable.
-                if (!button.target)
-                    continue;
-
-                s.*button.target = false;
-
                 bool hovered = (mouse.pos() >= button.pos).all() && (mouse.pos() < button.pos + button.size).all();
-
-                // Show tooltip if needed
-                if (tooltip_controller.ShouldShowTooltip() && button.tooltip_func && hovered)
-                    tooltip_controller.SetTooptip(button.pos + ivec2(0,button.size.y), button.tooltip_func(s));
 
                 if (button.mouse_pressed_here && mouse.left.up())
                 {
                     button.mouse_pressed_here = false;
                     if (hovered)
-                        s.*button.target = true;
+                        button.mouse_released_here_at_this_tick = true;
                 }
 
                 if (hovered && mouse.left.pressed())
@@ -357,12 +437,12 @@ namespace Components
                 }
 
                 if (hovered && button.mouse_pressed_here)
-                    button.status = State::Button::ButtonState::pressed;
+                    button.status = State::Button::Status::pressed;
                 else if (hovered && mouse.left.up())
-                    button.status = State::Button::ButtonState::hovered;
+                    button.status = State::Button::Status::hovered;
                 else
-                    button.status = State::Button::ButtonState::normal;
-            }
+                    button.status = State::Button::Status::normal;
+            });
         }
 
         { // Change editor mode (add/remove node)
@@ -385,22 +465,27 @@ namespace Components
             // Button actions
             if (can_change_mode)
             {
-                if (s.button_add_or)
+                if (s.buttons.add_gate_or.IsPressed())
                 {
                     s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
                     s.eraser_mode = false;
                 }
 
-                if (s.button_add_and)
+                if (s.buttons.add_gate_and.IsPressed())
                 {
                     s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
                     s.eraser_mode = false;
                 }
 
-                if (s.button_erase)
+                if (s.buttons.erase_gate.IsPressed())
                 {
                     s.held_node = nullptr;
                     s.eraser_mode = true;
+                }
+
+                if (s.buttons.toggle_inverted_connections.IsPressed())
+                {
+                    s.create_inverted_connections = !s.create_inverted_connections;
                 }
             }
         }
@@ -880,13 +965,10 @@ namespace Components
         if (s.partially_extended)
         {
             { // Buttons
-                for (const State::Button &button : s.buttons)
+                s.buttons.ForEachButton([&](const State::Button &button)
                 {
-                    if (button.game_state != button.any_game_state && button.game_state != s.game_state)
-                        continue;
-
                     r.iquad(button.pos + s.frame_offset, button.size).tex(s.atlas.editor_buttons.pos + button.tex_pos + ivec2(0, button.size.y * int(button.status)));
-                }
+                });
             }
 
             { // Minimap

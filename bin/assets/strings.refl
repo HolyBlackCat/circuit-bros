@@ -8,4 +8,6 @@
     ("Editor/ButtonTooltip_AddAndGate", "Add AND gate"),
     ("Editor/ButtonTooltip_AddOther", "Add other"),
     ("Editor/ButtonTooltip_Erase", "Erase"),
+    ("Editor/ButtonTooltip_ConnectionMode_Regular", "Default connection mode:\nRegular"),
+    ("Editor/ButtonTooltip_ConnectionMode_Inverted", "Default connection mode:\nInverted"),
 ]

@@ -48,7 +48,7 @@ namespace Components
         State &s = *state;
 
         s.ticks_since_mouse_moved++;
-        if (mouse.pos_delta())
+        if (mouse.pos_delta() || mouse.left.down() || mouse.right.down() || mouse.middle.down())
             RemoveTooltipAndResetTimer();
     }
     void TooltipController::Render() const
