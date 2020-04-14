@@ -4,7 +4,9 @@
 
 namespace GuiStyle
 {
-    inline constexpr fvec3 color_text(1), color_text_inactive(0.6), color_bg(0), color_bg_active(0.1,0.25,1), color_border(0.2,0.5,1);
+    inline constexpr fvec3 color_text(1), color_text_inactive(0.6), color_text_pressed = fvec3(2,28,21)/255, color_border(0.2,0.5,1),
+        color_bg(0), color_bg_active = fvec3(14,52,68)/255,
+        color_bg_pressed = fvec3(17,172,125)/255, color_bg_pressed_border = fvec3(22,233,173)/255;
     inline constexpr float alpha_text = 1, alpha_bg = 0.8, alpha_border = 0.8;
 
     inline constexpr ivec2 padding_around_text_a = ivec2(2, 1), /* top-left */ padding_around_text_b = ivec2(1, 1); /* bottom-right */

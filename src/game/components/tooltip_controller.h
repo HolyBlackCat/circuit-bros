@@ -21,12 +21,12 @@ namespace Components
         ~TooltipController();
 
         // Returns true if the mouse wasn't moved for a while.
-        // Then it's a good time to call `SetTooptip()`.
+        // Then it's a good time to call `SetTooltip()`.
         [[nodiscard]] bool ShouldShowTooltip() const;
 
         // Show tooltip with the specified text.
         // The tooltip will be removed when user moves mouse.
-        void SetTooptip(ivec2 pos, std::string text);
+        void SetTooltip(ivec2 pos, std::string text);
         void RemoveTooltipAndResetTimer();
 
         void Tick();

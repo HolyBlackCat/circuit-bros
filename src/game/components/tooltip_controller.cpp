@@ -27,7 +27,7 @@ namespace Components
         return state->ticks_since_mouse_moved == 30;
     }
 
-    void TooltipController::SetTooptip(ivec2 pos, std::string text)
+    void TooltipController::SetTooltip(ivec2 pos, std::string text)
     {
         state->show_tooltip = true;
         state->tooltip_pos = pos;

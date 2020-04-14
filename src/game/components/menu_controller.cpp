@@ -57,7 +57,8 @@ namespace Components
             new_menu.size.y += size.y;
         }
 
-        new_menu.pos = menu.pos;
+        static constexpr ivec2 pos_offset(2,2);
+        new_menu.pos = menu.pos + pos_offset;
         clamp_var(new_menu.pos, -screen_size/2 + GuiStyle::popup_min_dist_to_screen_edge, screen_size/2 - GuiStyle::popup_min_dist_to_screen_edge - new_menu.size);
     }
 
@@ -97,21 +98,22 @@ namespace Components
                 ivec2 entry_pos = menu->pos with(y += i * s.LineHeight());
 
                 entry.now_hovered = (mouse.pos() >= entry_pos).all() && (mouse.pos() < entry_pos + ivec2(menu->size.x, s.LineHeight())).all();
-
                 if (entry.now_hovered)
                     any_entry_hovered = true; // Note that we do it here, before checking if `entry.signal` is null.
-
                 if (!entry.signal)
+                {
                     entry.now_hovered = false;
+                    continue;
+                }
 
-                if (entry.now_hovered && mouse.left.pressed())
+                if (entry.now_hovered && mouse.left.released())
                 {
                     entry.signal();
                     close_menu = true;
                 }
             }
 
-            if (!any_entry_hovered && Input::Button{}.AssignMouseButton())
+            if ((!any_entry_hovered && mouse.left.pressed()) || mouse.right.pressed() || mouse.middle.pressed())
                 close_menu = true;
         }
     }
@@ -130,11 +132,35 @@ namespace Components
 
                 ivec2 entry_pos = s.menu->pos with(y += i * s.LineHeight());
 
+                fvec3 color;
+                float alpha = 1;
+                std::optional<fvec3> border_color;
+                fvec3 text_color = entry.color;
+                if (!entry.now_hovered)
+                {
+                    color = GuiStyle::color_bg;
+                    alpha = GuiStyle::alpha_bg;
+                }
+                else if (!mouse.left.down())
+                {
+                    color = GuiStyle::color_bg_active;
+                }
+                else
+                {
+                    color = GuiStyle::color_bg_pressed;
+                    border_color = GuiStyle::color_bg_pressed_border;
+                    text_color = GuiStyle::color_text_pressed;
+                }
+
                 // Background
-                r.iquad(entry_pos, ivec2(s.menu->size.x, s.LineHeight())).color(entry.now_hovered ? GuiStyle::color_bg_active : GuiStyle::color_bg).alpha(GuiStyle::alpha_bg);
+                r.iquad(entry_pos, ivec2(s.menu->size.x, s.LineHeight())).color(color).alpha(alpha);
+
+                // Border
+                if (border_color)
+                    Draw::RectFrame(entry_pos, ivec2(s.menu->size.x, s.LineHeight()), 1, true, *border_color);
 
                 // Text
-                r.itext(entry_pos + GuiStyle::padding_around_text_a, entry.text).color(entry.color).alpha(GuiStyle::alpha_text).align(ivec2(-1));
+                r.itext(entry_pos + GuiStyle::padding_around_text_a, entry.text).color(text_color).alpha(GuiStyle::alpha_text).align(ivec2(-1));
             }
         }
     }

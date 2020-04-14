@@ -138,7 +138,7 @@ namespace Components
             void TooltipFunc(TooltipController &c, F &&func)
             {
                 if (status == Status::hovered && c.ShouldShowTooltip())
-                    c.SetTooptip(pos with(y += size.y), std::forward<F>(func)());
+                    c.SetTooltip(pos with(y += size.y), std::forward<F>(func)());
             }
         };
 
@@ -517,14 +517,15 @@ namespace Components
             if (s.mouse_in_window && !s.held_node)
             {
                 // Clicked on an empty space, form a rectangular selection
-                if (mouse.left.pressed() && s.hovering_over_node_index == size_t(-1))
+                if (mouse.left.pressed() && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen())
                 {
                     s.now_creating_rect_selection = true;
                     s.rect_selection_initial_click_pos = mouse.pos() - s.window_offset + s.view_offset;
                 }
 
                 // Clicked on a node
-                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes && !s.now_creating_node_connection)
+                if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection
+                    && !s.now_dragging_selected_nodes && !s.now_creating_node_connection && !menu_controller.MenuIsOpen())
                 {
                     if (s.eraser_mode)
                     {
@@ -552,7 +553,8 @@ namespace Components
 
                 // Start dragging
                 if (mouse.left.pressed() && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down
-                    && s.hovering_over_node_index != size_t(-1) && s.selected_node_indices.contains(s.hovering_over_node_index))
+                    && s.hovering_over_node_index != size_t(-1) && s.selected_node_indices.contains(s.hovering_over_node_index)
+                    && !menu_controller.MenuIsOpen())
                 {
                     s.now_dragging_selected_nodes = true;
 
@@ -709,7 +711,7 @@ namespace Components
         {
             bool can_create_con = !s.held_node && !s.eraser_mode;
 
-            if (can_create_con && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
+            if (can_create_con && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down && !menu_controller.MenuIsOpen())
             {
                 ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
@@ -749,7 +751,7 @@ namespace Components
         {
             ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
-            if (s.eraser_mode && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1))
+            if (s.eraser_mode && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !menu_controller.MenuIsOpen())
             {
                 s.now_erasing_connections_instead_of_nodes = false;
 
@@ -840,7 +842,7 @@ namespace Components
         // Add a node
         if (s.fully_extended)
         {
-            if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1))
+            if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen())
             {
                 BasicNode::id_t new_node_id = circuit.nodes.empty() ? 0 : circuit.nodes.back()->id + 1;
 
@@ -1127,11 +1129,8 @@ namespace Components
         const State &s = *state;
 
         // Cursor
-        if (s.partially_extended)
-        {
-            if (window.HasMouseFocus())
-                r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center().alpha(smoothstep(pow(s.open_close_state, 1.5)));
-        }
+        if (window.HasMouseFocus())
+            r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center();
     }
 
 }

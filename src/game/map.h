@@ -27,7 +27,7 @@ class Map
 
     REFL_SIMPLE_STRUCT( Tile
         REFL_DECL(TileType REFL_INIT=TileType::air) mid
-        VERBATIM unsigned char random = 0;
+        REFL_VERBATIM unsigned char random = 0;
     )
 
     using array_t = Array2D<Tile>;
