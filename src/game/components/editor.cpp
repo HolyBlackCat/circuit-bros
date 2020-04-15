@@ -145,7 +145,7 @@ namespace Components
         struct Buttons
         {
             MEMBERS( DECL(Button)
-                stop, start_continue, advance_one_tick,
+                stop, start_pause_continue, advance_one_tick,
                 separator1,
                 add_gate_or, add_gate_and, add_gate_other,
                 erase_gate,
@@ -183,7 +183,7 @@ namespace Components
                     }
                 });
                 pos.x += 24;
-                start_continue = Button(pos, ivec2(24,20), Button::IndexToTexPos(1), [](Button &b, State &s, TooltipController &t)
+                start_pause_continue = Button(pos, ivec2(24,20), Button::IndexToTexPos(1), [](Button &b, State &s, TooltipController &t)
                 {
                     b.tex_pos = Button::IndexToTexPos(s.game_state == GameState::playing ? 2 : 1);
                     switch (s.game_state)
@@ -244,6 +244,14 @@ namespace Components
         };
         Buttons buttons;
 
+        struct Hotkeys
+        {
+            Input::Button stop = Input::r;
+            Input::Button play_pause = Input::space;
+            Input::Button advance_one_tick = Input::f;
+        };
+        Hotkeys hotkeys;
+
         State() {}
 
         // Returns -1 if we don't hover over a node.
@@ -272,6 +280,11 @@ namespace Components
 
             return closest_index;
         }
+
+        void RunWorldTick(World &world)
+        {
+            world.Tick();
+        }
     };
 
     Editor::Editor() : state(std::make_unique<State>()) {}
@@ -294,7 +307,7 @@ namespace Components
         return state->game_state;
     }
 
-    void Editor::Tick(Circuit &circuit, MenuController &menu_controller, TooltipController &tooltip_controller)
+    void Editor::Tick(std::optional<World> &world, const std::optional<World> &saved_world, Circuit &circuit, MenuController &menu_controller, TooltipController &tooltip_controller)
     {
         static constexpr float open_close_state_step = 0.025;
 
@@ -404,7 +417,7 @@ namespace Components
         }
 
         // Buttons
-        if (s.fully_extended)
+        if (s.partially_extended) // Sic
         {
             s.buttons.ForEachButton([&](State::Button &button)
             {
@@ -422,16 +435,18 @@ namespace Components
                     return;
                 }
 
-                bool hovered = (mouse.pos() >= button.pos).all() && (mouse.pos() < button.pos + button.size).all();
+                bool hovered = s.fully_extended && (mouse.pos() >= button.pos).all() && (mouse.pos() < button.pos + button.size).all();
+
+                bool can_press = !s.now_creating_rect_selection && !s.now_dragging_selected_nodes;
 
                 if (button.mouse_pressed_here && mouse.left.up())
                 {
                     button.mouse_pressed_here = false;
-                    if (hovered)
+                    if (hovered && can_press)
                         button.mouse_released_here_at_this_tick = true;
                 }
 
-                if (hovered && mouse.left.pressed())
+                if (hovered && mouse.left.pressed() && can_press)
                 {
                     button.mouse_pressed_here = true;
                 }
@@ -446,7 +461,7 @@ namespace Components
         }
 
         { // Change editor mode (add/remove node)
-            // Disatble tools if not extended
+            // Disable tools if not extended
             if (!s.partially_extended)
             {
                 s.held_node = nullptr;
@@ -459,34 +474,50 @@ namespace Components
                 s.held_node = nullptr;
                 s.eraser_mode = false;
             }
+        }
 
-            bool can_change_mode = !s.now_creating_rect_selection && !s.now_dragging_selected_nodes;
-
-            // Button actions
-            if (can_change_mode)
+        { // Button actions
+            if (s.buttons.add_gate_or.IsPressed())
             {
-                if (s.buttons.add_gate_or.IsPressed())
-                {
-                    s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
-                    s.eraser_mode = false;
-                }
+                s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
+                s.eraser_mode = false;
+            }
 
-                if (s.buttons.add_gate_and.IsPressed())
-                {
-                    s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
-                    s.eraser_mode = false;
-                }
+            if (s.buttons.add_gate_and.IsPressed())
+            {
+                s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
+                s.eraser_mode = false;
+            }
 
-                if (s.buttons.erase_gate.IsPressed())
-                {
-                    s.held_node = nullptr;
-                    s.eraser_mode = true;
-                }
+            if (s.buttons.erase_gate.IsPressed())
+            {
+                s.held_node = nullptr;
+                s.eraser_mode = true;
+            }
 
-                if (s.buttons.toggle_inverted_connections.IsPressed())
-                {
-                    s.create_inverted_connections = !s.create_inverted_connections;
-                }
+            if (s.buttons.toggle_inverted_connections.IsPressed())
+            {
+                s.create_inverted_connections = !s.create_inverted_connections;
+            }
+
+            if (s.buttons.stop.IsPressed() || s.hotkeys.stop.pressed())
+            {
+                s.game_state = GameState::stopped;
+                if (world && saved_world)
+                    world = saved_world;
+            }
+            if (s.buttons.start_pause_continue.IsPressed() || s.hotkeys.play_pause.pressed())
+            {
+                if (s.game_state == GameState::playing)
+                    s.game_state = GameState::paused;
+                else
+                    s.game_state = GameState::playing;
+            }
+            if (s.buttons.advance_one_tick.IsPressed() || s.hotkeys.advance_one_tick.pressed())
+            {
+                s.game_state = GameState::paused;
+                if (world)
+                    s.RunWorldTick(*world);
             }
         }
 
@@ -517,7 +548,7 @@ namespace Components
             if (s.mouse_in_window && !s.held_node)
             {
                 // Clicked on an empty space, form a rectangular selection
-                if (mouse.left.pressed() && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen())
+                if (mouse.left.pressed() && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                 {
                     s.now_creating_rect_selection = true;
                     s.rect_selection_initial_click_pos = mouse.pos() - s.window_offset + s.view_offset;
@@ -525,7 +556,7 @@ namespace Components
 
                 // Clicked on a node
                 if (mouse.left.released() && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection
-                    && !s.now_dragging_selected_nodes && !s.now_creating_node_connection && !menu_controller.MenuIsOpen())
+                    && !s.now_dragging_selected_nodes && !s.now_creating_node_connection && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                 {
                     if (s.eraser_mode)
                     {
@@ -554,7 +585,7 @@ namespace Components
                 // Start dragging
                 if (mouse.left.pressed() && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down
                     && s.hovering_over_node_index != size_t(-1) && s.selected_node_indices.contains(s.hovering_over_node_index)
-                    && !menu_controller.MenuIsOpen())
+                    && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                 {
                     s.now_dragging_selected_nodes = true;
 
@@ -578,39 +609,42 @@ namespace Components
                     // Released mouse button, determine which nodes should be selected or erased
                     s.now_creating_rect_selection = false;
 
-                    auto NodeIsInSelection = [&](const NodeStorage &node)
+                    if (!menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                     {
-                        ivec2 half_extent = node->GetVisualHalfExtent();
-                        return (node->pos - half_extent >= s.rect_selection_pos).all() && (node->pos + half_extent < s.rect_selection_pos + s.rect_selection_size).all();
-                    };
-
-                    if (s.eraser_mode)
-                    {
-                        s.hovering_over_node_index = -1;
-                        s.need_recalc_hovered_node = true;
-
-                        std::erase_if(circuit.nodes, [&](const NodeStorage &node)
+                        auto NodeIsInSelection = [&](const NodeStorage &node)
                         {
-                            if (!NodeIsInSelection(node))
-                                return false;
-                            s.recently_deleted_node_ids.push_back(node->id);
-                            return true;
-                        });
-                    }
-                    else
-                    {
-                        if (!s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
-                            s.selected_node_indices.clear();
+                            ivec2 half_extent = node->GetVisualHalfExtent();
+                            return (node->pos - half_extent >= s.rect_selection_pos).all() && (node->pos + half_extent < s.rect_selection_pos + s.rect_selection_size).all();
+                        };
 
-                        for (size_t i = 0; i < circuit.nodes.size(); i++)
+                        if (s.eraser_mode)
                         {
-                            if (!NodeIsInSelection(circuit.nodes[i]))
-                                continue;
+                            s.hovering_over_node_index = -1;
+                            s.need_recalc_hovered_node = true;
 
-                            if (s.selection_subtract_modifier_down)
-                                s.selected_node_indices.erase(i);
-                            else
-                                s.selected_node_indices.insert(i);
+                            std::erase_if(circuit.nodes, [&](const NodeStorage &node)
+                            {
+                                if (!NodeIsInSelection(node))
+                                    return false;
+                                s.recently_deleted_node_ids.push_back(node->id);
+                                return true;
+                            });
+                        }
+                        else
+                        {
+                            if (!s.selection_add_modifier_down && !s.selection_subtract_modifier_down)
+                                s.selected_node_indices.clear();
+
+                            for (size_t i = 0; i < circuit.nodes.size(); i++)
+                            {
+                                if (!NodeIsInSelection(circuit.nodes[i]))
+                                    continue;
+
+                                if (s.selection_subtract_modifier_down)
+                                    s.selected_node_indices.erase(i);
+                                else
+                                    s.selected_node_indices.insert(i);
+                            }
                         }
                     }
                 }
@@ -633,65 +667,68 @@ namespace Components
 
                     s.now_dragging_selected_nodes = false;
 
-                    bool can_move = true;
-
-                    // Make sure the nodes are not dragged out of bounds
-                    if (can_move)
+                    if (!menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                     {
-                        for (size_t i = 0; i < s.selected_node_indices.size(); i++)
+                        bool can_move = true;
+
+                        // Make sure the nodes are not dragged out of bounds
+                        if (can_move)
                         {
-                            ivec2 new_pos = abs_mouse_pos + s.dragged_nodes_offsets_to_mouse_pos[i];
-                            if ((new_pos < -s.area_size/2).any() || (new_pos > s.area_size/2).any())
+                            for (size_t i = 0; i < s.selected_node_indices.size(); i++)
                             {
-                                can_move = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    // Make sure the dragged nodes don't overlap with the other nodes.
-                    if (can_move)
-                    {
-                        auto sel_index_iter = s.selected_node_indices.begin();
-                        for (size_t static_node_index = 0; static_node_index < circuit.nodes.size(); static_node_index++)
-                        {
-                            // Skip node indices that are selected.
-                            if (sel_index_iter != s.selected_node_indices.end() && *sel_index_iter == static_node_index)
-                            {
-                                sel_index_iter++;
-                                continue;
-                            }
-
-                            const BasicNode &static_node = *circuit.nodes[static_node_index];
-
-                            size_t i = 0;
-                            for (size_t moving_node_index : s.selected_node_indices)
-                            {
-                                const BasicNode &moving_node = *circuit.nodes[moving_node_index];
-
-                                ivec2 new_moving_node_pos = abs_mouse_pos + s.dragged_nodes_offsets_to_mouse_pos[i++];
-
-                                if (static_node.VisuallyContainsPoint(new_moving_node_pos, moving_node.GetVisualHalfExtent()))
+                                ivec2 new_pos = abs_mouse_pos + s.dragged_nodes_offsets_to_mouse_pos[i];
+                                if ((new_pos < -s.area_size/2).any() || (new_pos > s.area_size/2).any())
                                 {
                                     can_move = false;
                                     break;
                                 }
                             }
-
-                            if (!can_move)
-                                break;
                         }
-                    }
 
-                    // If there's something wrong with the new node positions, move them back to their original location.
-                    if (!can_move)
-                    {
-                        s.need_recalc_hovered_node = true;
-
-                        size_t i = 0;
-                        for (size_t index : s.selected_node_indices)
+                        // Make sure the dragged nodes don't overlap with the other nodes.
+                        if (can_move)
                         {
-                            circuit.nodes[index]->pos = s.dragging_nodes_initial_click_pos + s.dragged_nodes_offsets_to_mouse_pos[i++];
+                            auto sel_index_iter = s.selected_node_indices.begin();
+                            for (size_t static_node_index = 0; static_node_index < circuit.nodes.size(); static_node_index++)
+                            {
+                                // Skip node indices that are selected.
+                                if (sel_index_iter != s.selected_node_indices.end() && *sel_index_iter == static_node_index)
+                                {
+                                    sel_index_iter++;
+                                    continue;
+                                }
+
+                                const BasicNode &static_node = *circuit.nodes[static_node_index];
+
+                                size_t i = 0;
+                                for (size_t moving_node_index : s.selected_node_indices)
+                                {
+                                    const BasicNode &moving_node = *circuit.nodes[moving_node_index];
+
+                                    ivec2 new_moving_node_pos = abs_mouse_pos + s.dragged_nodes_offsets_to_mouse_pos[i++];
+
+                                    if (static_node.VisuallyContainsPoint(new_moving_node_pos, moving_node.GetVisualHalfExtent()))
+                                    {
+                                        can_move = false;
+                                        break;
+                                    }
+                                }
+
+                                if (!can_move)
+                                    break;
+                            }
+                        }
+
+                        // If there's something wrong with the new node positions, move them back to their original location.
+                        if (!can_move)
+                        {
+                            s.need_recalc_hovered_node = true;
+
+                            size_t i = 0;
+                            for (size_t index : s.selected_node_indices)
+                            {
+                                circuit.nodes[index]->pos = s.dragging_nodes_initial_click_pos + s.dragged_nodes_offsets_to_mouse_pos[i++];
+                            }
                         }
                     }
                 }
@@ -711,7 +748,8 @@ namespace Components
         {
             bool can_create_con = !s.held_node && !s.eraser_mode;
 
-            if (can_create_con && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !s.selection_add_modifier_down && !s.selection_subtract_modifier_down && !menu_controller.MenuIsOpen())
+            if (can_create_con && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !s.selection_add_modifier_down
+                && !s.selection_subtract_modifier_down && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
             {
                 ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
@@ -728,7 +766,7 @@ namespace Components
             if (mouse.left.up())
             {
                 if (can_create_con && s.now_creating_node_connection && s.node_connection_src_node_index != size_t(-1)
-                    && s.hovering_over_node_index != size_t(-1) && s.hovering_over_node_index != s.node_connection_src_node_index)
+                    && s.hovering_over_node_index != size_t(-1) && s.hovering_over_node_index != s.node_connection_src_node_index && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                 {
                     ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
@@ -751,7 +789,7 @@ namespace Components
         {
             ivec2 mouse_abs_pos = mouse.pos() - s.window_offset + s.view_offset;
 
-            if (s.eraser_mode && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !menu_controller.MenuIsOpen())
+            if (s.eraser_mode && mouse.left.pressed() && s.hovering_over_node_index != size_t(-1) && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
             {
                 s.now_erasing_connections_instead_of_nodes = false;
 
@@ -827,7 +865,7 @@ namespace Components
 
             if (mouse.left.up())
             {
-                if (s.eraser_mode && s.erasing_node_connection_node_index != size_t(-1) && s.erasing_node_connection_con_index != -1)
+                if (s.eraser_mode && s.erasing_node_connection_node_index != size_t(-1) && s.erasing_node_connection_con_index != -1 && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
                 {
                     BasicNode &node = *circuit.nodes[s.erasing_node_connection_node_index];
                     node.Disconnect(circuit, s.erasing_node_connection_point_index, s.erasing_node_connection_point_type_is_out, s.erasing_node_connection_con_index);
@@ -842,7 +880,7 @@ namespace Components
         // Add a node
         if (s.fully_extended)
         {
-            if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen())
+            if (mouse.left.pressed() && s.mouse_in_window && s.held_node && s.hovering_over_node_index == size_t(-1) && !menu_controller.MenuIsOpen() && s.game_state == GameState::stopped)
             {
                 BasicNode::id_t new_node_id = circuit.nodes.empty() ? 0 : circuit.nodes.back()->id + 1;
 
@@ -886,6 +924,14 @@ namespace Components
 
                 // Clear the list of deleted IDs.
                 s.recently_deleted_node_ids.clear();
+            }
+        }
+
+        { // World tick
+            if (s.game_state == GameState::playing)
+            {
+                if (world)
+                    s.RunWorldTick(*world);
             }
         }
 
@@ -1132,5 +1178,4 @@ namespace Components
         if (window.HasMouseFocus())
             r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center();
     }
-
 }

@@ -1,9 +1,11 @@
+#include <optional>
+
 #include "game/components/circuit.h"
 #include "game/components/editor.h"
 #include "game/components/menu_controller.h"
 #include "game/components/tooltip_controller.h"
+#include "game/components/world.h"
 #include "game/main.h"
-#include "game/map.h"
 #include "reflection/full_with_poly.h"
 
 namespace States
@@ -12,21 +14,17 @@ namespace States
     {
         UNNAMED_MEMBERS()
 
-        SIMPLE_STRUCT( Atlas
-            DECL(Graphics::TextureAtlas::Region) sky_background
-            VERBATIM Atlas() {texture_atlas().InitRegions(*this, ".png");}
-        )
-        inline static Atlas atlas;
-
-
-        Map map;
+        std::optional<Components::World> world, world_copy;
 
         Components::Circuit circuit;
         Components::Editor editor;
         Components::TooltipController tooltip_controller;
         Components::MenuController menu_controller;
 
-        Game() : map("assets/maps/1.json") {}
+        Game()
+        {
+            world = world_copy = Components::World("1");
+        }
 
         void Tick(const State::NextState &next_state) override
         {
@@ -34,7 +32,7 @@ namespace States
 
             // ImGui::ShowDemoWindow();
 
-            editor.Tick(circuit, menu_controller, tooltip_controller);
+            editor.Tick(world, world_copy, circuit, menu_controller, tooltip_controller);
             if (Input::Button(Input::tab).pressed())
                 editor.SetOpen(!editor.IsOpen());
 
@@ -49,9 +47,9 @@ namespace States
 
             r.BindShader();
 
-            r.iquad(ivec2(0), atlas.sky_background).center();
+            if (world)
+                world->Render();
 
-            map.Render(Meta::value_tag<0>{}, ivec2(200,50));
             editor.Render(circuit);
             menu_controller.Render();
             tooltip_controller.Render();
