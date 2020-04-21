@@ -1,6 +1,13 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
+#include <deque>
 #include <iostream>
+#include <map>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include "audio/complete.h"
 #include "gameutils/adaptive_viewport.h"

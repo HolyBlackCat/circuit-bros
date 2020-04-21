@@ -1175,7 +1175,10 @@ namespace Components
         const State &s = *state;
 
         // Cursor
-        if (window.HasMouseFocus())
-            r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center();
+        if (s.partially_extended)
+        {
+            if (window.HasMouseFocus())
+                r.iquad(mouse.pos(), s.atlas.cursor.region(ivec2(0), ivec2(16))).center().alpha(smoothstep(pow(s.open_close_state, 1.5)));
+        }
     }
 }

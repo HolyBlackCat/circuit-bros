@@ -24,6 +24,7 @@ namespace Components::Game
         {
             air,
             stone,
+            spike,
             _count,
         };
 
@@ -43,6 +44,8 @@ namespace Components::Game
             return ret;
         }
 
+        Tiled::PointLayer point_layer;
+
       public:
         Map() {}
 
@@ -52,6 +55,7 @@ namespace Components::Game
             {
                 Json json(Stream::ReadOnlyData(file_name).string(), 32);
 
+                // Load tile layers
                 Meta::cexpr_for<Refl::Class::member_count<Tile>>([&](auto index)
                 {
                     try
@@ -90,8 +94,15 @@ namespace Components::Game
                     }
                 });
 
+                // Make a random layer
                 for (auto pos : index_vec2(0) <= vector_range < tiles.size())
                     tiles.unsafe_at(pos).random = rng.integer();
+
+                // Load points
+                auto point_layer_view = Tiled::FindLayer(json.GetView(), "objects");
+                if (!point_layer_view)
+                    Program::Error("The `objects` layer is missing.");
+                point_layer = Tiled::LoadPointLayer(point_layer_view);
             }
             catch (std::exception &e)
             {
@@ -102,6 +113,11 @@ namespace Components::Game
         [[nodiscard]] const array_t &Tiles() const
         {
             return tiles;
+        }
+
+        [[nodiscard]] const Tiled::PointLayer &Points() const
+        {
+            return point_layer;
         }
 
         template <int LayerIndex>
@@ -123,15 +139,19 @@ namespace Components::Game
                 TileType tile = Refl::Class::Member<LayerIndex>(tile_stack);
                 unsigned char random = tile_stack.random;
 
-                auto SameAs = [&](ivec2 offset)
+                auto SameAs = [&](ivec2 offset, std::initializer_list<TileType> list = {})
                 {
-                    return tile == Refl::Class::Member<LayerIndex>(tiles.try_get(pos + offset));
+                    TileType this_tile = Refl::Class::Member<LayerIndex>(tiles.try_get(pos + offset));
+                    if (list.size() == 0)
+                        return this_tile == tile;
+                    else
+                        return std::find(list.begin(), list.end(), this_tile) != list.end();
                 };
 
                 switch (tile)
                 {
-                  case TileType::air:
                   case TileType::_count:
+                  case TileType::air:
                     // Nothing.
                     break;
                   case TileType::stone:
@@ -169,10 +189,10 @@ namespace Components::Game
                         DrawTile(pixel_pos, ivec2(0 + state, 1 + variant));
 
                         // Grass
-                        if (Refl::Class::Member<LayerIndex>(tiles.try_get(pos with(y -= 1))) == TileType::air)
+                        if (SameAs(ivec2(0,-1), {TileType::air, TileType::spike}))
                         {
-                            bool grass_l = mask & 0b00001000 && Refl::Class::Member<LayerIndex>(tiles.try_get(pos + ivec2(-1,-1))) == TileType::air;
-                            bool grass_r = mask & 0b10000000 && Refl::Class::Member<LayerIndex>(tiles.try_get(pos + ivec2( 1,-1))) == TileType::air;
+                            bool grass_l = mask & 0b00001000 && SameAs(ivec2(-1,-1), {TileType::air, TileType::spike});
+                            bool grass_r = mask & 0b10000000 && SameAs(ivec2( 1,-1), {TileType::air, TileType::spike});
 
                             int state = -1;
                             if (grass_l && grass_r)
@@ -187,6 +207,9 @@ namespace Components::Game
                         }
                     }
                     break;
+                  case TileType::spike:
+                    DrawTile(pixel_pos, ivec2(4 + bool(random & 1), 5 + bool(random & 2)));
+                    break;
                 }
             }
         }
@@ -197,6 +220,7 @@ namespace Components::Game
             {
               case TileType::_count:
               case TileType::air:
+              case TileType::spike:
                 return false;
               case TileType::stone:
                 return true;
