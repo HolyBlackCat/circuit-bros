@@ -18,8 +18,8 @@ namespace Components
 
         struct Player
         {
-            static constexpr float max_vel_x = 3, max_vel_y_down = 4, max_vel_y_up = 2.5, walk_acc = 0.13, walk_dec = 0.2, walk_acc_air = 0.1, walk_dec_air = 0.1, jump_acc = 0.2;
-            static constexpr int ticks_per_walk_anim_frame = 3, jump_max_len = 20, camera_offset_y = 24;
+            static constexpr float max_vel_x = 3, max_vel_y_down = 4, max_vel_y_up = 2.5, walk_acc = 0.13, walk_dec = 0.2, walk_acc_air = 0.1, walk_dec_air = 0.1, jump_acc = 0.2, gravity = 0.1;
+            static constexpr int ticks_per_walk_anim_frame = 3, jump_max_len = 20, camera_offset_y = 24, ticks_before_explosion_on_death = 20;
 
             ivec2 pos{}, prev_pos{};
             fvec2 vel{}, prev_vel{};
@@ -31,11 +31,24 @@ namespace Components
             int anim_frame = 0;
             int walk_anim_timer = 0;
 
+            int death_timer = 0;
+
+            bool IsDead() const
+            {
+                return death_timer > 0;
+            }
+            void Kill()
+            {
+                if (death_timer == 0)
+                    death_timer = 1;
+            }
+
+            static constexpr int hitbox_x_min = -6, hitbox_x_max = 5;
             static constexpr ivec2 hitbox_offsets[] =
             {
-                ivec2(-6,-4), ivec2( 5,-4),
-                ivec2(-6, 0), ivec2( 5, 5),
-                ivec2(-6, 9), ivec2( 5, 9),
+                ivec2(hitbox_x_min,-4), ivec2(hitbox_x_max,-4),
+                ivec2(hitbox_x_min, 0), ivec2(hitbox_x_max, 5),
+                ivec2(hitbox_x_min, 9), ivec2(hitbox_x_max, 9),
             };
 
             bool SolidAtOffset(const Game::Map &map, ivec2 offset) const
@@ -63,6 +76,7 @@ namespace Components
         fvec2 camera_pos_float{};
         fvec2 camera_vel{};
         ivec2 camera_pos{}; // This is computed based on `camera_pos_float`.
+        ivec2 camera_shake{}; // Set to small positive values to shake the camera.
 
         struct Particle
         {
@@ -79,7 +93,24 @@ namespace Components
         };
         std::deque<Particle> particles;
 
-        void PartileEffect_Rocket(int count, fvec2 start_pos, fvec2 start_area_half_size, fvec2 base_vel, fvec2 vel_max_abs_delta)
+        struct ScrapParticle
+        {
+            static constexpr float gravity = Player::gravity;
+
+            fvec2 pos{};
+            fvec2 vel{};
+            Graphics::TextureAtlas::Region tex;
+            int cur_age = 0;
+            int life = 10;
+
+            bool fire_trail = false;
+            bool collision = false;
+
+            bool sprite_flip_x = rng.boolean();
+        };
+        std::deque<ScrapParticle> scrap_particles;
+
+        void ParticleEffect_Rocket(int count, fvec2 start_pos, fvec2 start_area_half_size, fvec2 base_vel, fvec2 vel_max_abs_delta)
         {
             while (count-- > 0)
             {
@@ -116,6 +147,72 @@ namespace Components
                                            alpha0 = 1, alpha1 = 0, size0 = 2 <= rng.real() <= 3, size1 = 4 <= rng.real() <= 7));
             }
         }
+
+        void ParticleEffect_FireTrail(int count, fvec2 start_pos, fvec2 start_area_half_size, fvec2 base_vel, fvec2 vel_max_abs_delta)
+        {
+            while (count-- > 0)
+            {
+                fvec2 pos, vel;
+                for (int m = 0; m < 2; m++)
+                {
+                    pos[m] = start_pos[m] + (-start_area_half_size[m] <= rng.real() <= start_area_half_size[m]);
+                    vel[m] = base_vel[m] + (-vel_max_abs_delta[m] <= rng.real() <= vel_max_abs_delta[m]);
+                }
+
+                static const fmat2 matrix = fmat2::scale(fvec2(0.815));
+
+                particles.push_back(adjust(State::Particle{}, pos = pos, vel = vel, vel_m = matrix, life = 7 <= rng.integer() <= 30,
+                                           color0 = fvec3(1,0.4 <= rng.real() <= 1,0), color1 = fvec3(1), alpha0 = 1, alpha1 = 0, beta0 = 0.9, beta1 = 1,
+                                           size0 = 2 <= rng.real() <= 3, size1 = 5 <= rng.real() <= 11));
+            }
+        }
+
+        void ParticleEffect_Fire(int count, fvec2 start_pos, fvec2 start_area_half_size, fvec2 base_vel, fvec2 vel_max_abs_delta)
+        {
+            while (count-- > 0)
+            {
+                fvec2 pos, vel;
+                for (int m = 0; m < 2; m++)
+                {
+                    pos[m] = start_pos[m] + (-start_area_half_size[m] <= rng.real() <= start_area_half_size[m]);
+                    vel[m] = base_vel[m] + (-vel_max_abs_delta[m] <= rng.real() <= vel_max_abs_delta[m]);
+                }
+
+                static const fmat2 matrix = fmat2::scale(fvec2(0.93));
+
+                particles.push_back(adjust(State::Particle{}, pos = pos, vel = vel, vel_m = matrix, life = 15 <= rng.integer() <= 60,
+                                           color0 = fvec3(1,0.4 <= rng.real() <= 1,0), color1 = fvec3(1), alpha0 = 1, alpha1 = 0, beta0 = 0.9, beta1 = 1,
+                                           size0 = 2 <= rng.real() <= 3, size1 = 8 <= rng.real() <= 20));
+            }
+        }
+
+        void ParticleEffect_PlayerScrapExplosion(fvec2 base_pos, fvec2 base_vel)
+        {
+            int iterations = 4;
+            while (iterations-- > 0)
+            {
+                constexpr int piece_count = 5;
+                int indices[piece_count];
+                for (int i = 0; i < piece_count; i++)
+                    indices[i] = i;
+                std::shuffle(std::begin(indices), std::end(indices), rng.generator());
+
+                float base_angle = rng.angle();
+                const float angle_step = f_pi * 2 / piece_count, angle_max_abs_change = angle_step * 0.9 / 2;
+
+                for (int i = 0; i < 5; i++)
+                {
+                    float angle = base_angle + angle_step * i + (-angle_max_abs_change <= rng.real() <= angle_max_abs_change);
+                    fvec2 dir = fvec2::dir(angle);
+
+                    fvec2 pos = base_pos + dir * float(3 <= rng.real() <= 6);
+                    fvec2 vel = base_vel + dir * float(0.15 <= rng.real() <= 4.65);
+
+                    scrap_particles.push_back(adjust(ScrapParticle{}, pos = pos, vel = vel, tex = atlas.player.region(ivec2(12 * i, 24), ivec2(12)),
+                                                     life = 160 <= rng.integer() <= 300, fire_trail = true, collision = int(0 <= rng.integer() < 3) != 0));
+                }
+            }
+        }
     };
 
     World::World(std::string level_name) : state(std::make_unique<State>())
@@ -137,11 +234,11 @@ namespace Components
         State &s = *state;
 
         { // Walk controls
-            int hc = Input::Button(Input::right).down() - Input::Button(Input::left).down();
+            int hc = s.p.IsDead() ? 0 : Input::Button(Input::right).down() - Input::Button(Input::left).down();
 
             if (!s.p.on_ground && hc != 0 && s.p.jump_ticks_left > 0)
             {
-                s.PartileEffect_Rocket(3, s.p.pos with(x += 5 * -hc, y += 2), fvec2(0.2, 0.5), s.p.vel with(x += 2.3 * -hc), fvec2(1.5,0.5));
+                s.ParticleEffect_Rocket(3, s.p.pos with(x += 5 * -hc, y += 2), fvec2(0.2, 0.5), s.p.vel with(x += 2.3 * -hc), fvec2(1.5,0.5));
             }
 
 
@@ -178,8 +275,7 @@ namespace Components
             if (s.p.on_ground)
                 s.p.jump_ticks_left = s.p.jump_max_len;
 
-            Input::Button jump_button = Input::up;
-            if (jump_button.up())
+            if (Input::Button(Input::up).up() || s.p.IsDead())
                 s.p.jump_ticks_left = 0;
             else if (s.p.jump_ticks_left > 0)
                 s.p.jump_ticks_left--;
@@ -187,12 +283,11 @@ namespace Components
             if (s.p.jump_ticks_left > 0)
             {
                 s.p.vel.y -= s.p.jump_acc;
-                s.PartileEffect_Rocket(3, s.p.pos with(y += 4), fvec2(1.5, 0.5), s.p.vel with(y += 2.55), fvec2(0.35,1));
+                s.ParticleEffect_Rocket(3, s.p.pos with(y += 4), fvec2(1.5, 0.5), s.p.vel with(y += 2.55), fvec2(0.35,1));
             }
             else
             {
-                static constexpr float gravity = 0.1;
-                s.p.vel.y += gravity;
+                s.p.vel.y += s.p.gravity;
             }
         }
 
@@ -244,6 +339,26 @@ namespace Components
                 s.ParticleEffect_Jump(s.p.pos);
         }
 
+        { // Spike collisions
+            if (!s.p.IsDead() && (s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_min) || s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_max)))
+                s.p.Kill();
+        }
+
+        { // Death timer and effects
+            if (s.p.death_timer == 3)
+                s.ParticleEffect_Fire(30, s.p.pos, fvec2(8,6), s.p.vel with(y -= 0.6), fvec2(1.4,1.2));
+            if (s.p.death_timer > 0 && s.p.death_timer < s.p.ticks_before_explosion_on_death)
+                s.ParticleEffect_Fire(3, s.p.pos, fvec2(8,6), s.p.vel with(y -= 1.2), fvec2(0.6,1.1));
+            if (s.p.death_timer == s.p.ticks_before_explosion_on_death)
+            {
+                s.ParticleEffect_PlayerScrapExplosion(s.p.pos, (s.p.vel * 0.7) with(y -= 1.5));
+                s.camera_shake = ivec2(1);
+            }
+
+            if (s.p.death_timer > 0)
+                s.p.death_timer++;
+        }
+
         { // Move camera
             fvec2 target = s.p.pos with(y -= s.p.camera_offset_y);
 
@@ -277,23 +392,93 @@ namespace Components
                 }
             }
 
+            ivec2 shake{};
+            if ((s.camera_shake > 0).any())
+            {
+                for (int m = 0; m < 2; m++)
+                {
+                    if (s.camera_shake[m] == 0)
+                        continue;
+
+                    shake[m] = (1 <= rng.integer() <= s.camera_shake[m]) * rng.sign();
+                }
+                s.camera_shake -= sign(s.camera_shake);
+            }
+
             // Compute final camera pos
-            s.camera_pos = iround(s.camera_pos_float);
+            s.camera_pos = iround(s.camera_pos_float) + shake;
         }
 
         { // Update particles
-            for (State::Particle &par : s.particles)
-            {
-                par.pos += par.vel;
+            { // Regular
+                for (State::Particle &par : s.particles)
+                {
+                    par.pos += par.vel;
 
-                if (par.vel_m_ground)
-                    par.vel = (s.map.PixelIsSolid(par.pos) ? *par.vel_m_ground : par.vel_m) * par.vel;
-                else
-                    par.vel = par.vel_m * par.vel;
+                    if (par.vel_m_ground)
+                        par.vel = (s.map.PixelIsSolid(par.pos) ? *par.vel_m_ground : par.vel_m) * par.vel;
+                    else
+                        par.vel = par.vel_m * par.vel;
 
-                par.cur_age++;
+                    par.cur_age++;
+                }
+                std::erase_if(s.particles, [](const State::Particle &par){return par.cur_age >= par.life;});
             }
-            std::erase_if(s.particles, [](const State::Particle &par){return par.cur_age >= par.life;});
+
+            { // Scrap
+                for (State::ScrapParticle &par : s.scrap_particles)
+                {
+                    if (!par.collision)
+                    {
+                        par.pos += par.vel;
+                    }
+                    else
+                    {
+                        ivec2 int_vel(par.vel);
+                        fvec2 frac_vel = par.vel - int_vel;
+
+                        while (int_vel != 0)
+                        {
+                            for (int m = 0; m < 2; m++)
+                            {
+                                int sg = sign(int_vel[m]);
+                                ivec2 offset{};
+                                offset[m] = sg;
+                                if (s.map.PixelIsSolid(iround(par.pos) + offset))
+                                {
+                                    par.vel[m] *= -0.2;
+                                    par.vel[!m] *= 0.5;
+
+                                    if (abs(par.vel[m]) < 0.3)
+                                        par.vel[m] = 0;
+
+                                    int_vel = ivec2(0);
+                                    frac_vel = fvec2(0);
+                                }
+                                else
+                                {
+                                    par.pos[m] += sg;
+                                    int_vel[m] -= sg;
+                                }
+                            }
+                        }
+
+                        if (!s.map.PixelIsSolid(iround(par.pos) + sign(frac_vel)))
+                            par.pos += frac_vel;
+                    }
+
+                    par.vel.y += par.gravity;
+                    par.cur_age++;
+
+                    if (par.fire_trail)
+                    {
+                        float p = pow(1 - par.cur_age / float(par.life), 4);
+                        if (float(0 <= rng.real() <= 1) < p)
+                            s.ParticleEffect_FireTrail(1, par.pos, fvec2(1.5), par.vel with(y -= 1), fvec2(0.2));
+                    }
+                }
+                std::erase_if(s.scrap_particles, [](const State::ScrapParticle &par){return par.cur_age >= par.life;});
+            }
         }
 
         { // Update `prev_*` variables
@@ -313,19 +498,32 @@ namespace Components
         // Map
         state->map.Render(Meta::value_tag<0>{}, s.camera_pos);
 
-        // Player
-        static constexpr ivec2 player_sprite_size(24,24);
-        r.iquad(s.p.pos - s.camera_pos, s.atlas.player.region(ivec2(player_sprite_size.x * s.p.anim_frame, 0), player_sprite_size)).flip_x(s.p.facing_left).center();
+        { // Player
+            static constexpr ivec2 player_sprite_size(24,24);
+            float alpha = 1 - clamp((s.p.death_timer - s.p.ticks_before_explosion_on_death) / float(20));
 
-        // Particles
-        for (const State::Particle &par : s.particles)
-        {
-            float t = par.cur_age / float(par.life);
-            fvec3 color = mix(t, par.color0, par.color1);
-            float alpha = mix(t, par.alpha0, par.alpha1);
-            float beta = mix(t, par.beta0, par.beta1);
-            float size = mix(t, par.size0, par.size1);
-            r.fquad(par.pos - s.camera_pos, fvec2(size)).center().tex(s.atlas.particle.pos, s.atlas.particle.size).color(color).mix(0).alpha(alpha).beta(beta);
+            r.iquad(s.p.pos - s.camera_pos, s.atlas.player.region(ivec2(player_sprite_size.x * s.p.anim_frame, 0), player_sprite_size)).flip_x(s.p.facing_left).center().alpha(alpha);
+        }
+
+        { // Particles
+            // Regular
+            for (const State::Particle &par : s.particles)
+            {
+                float t = par.cur_age / float(par.life);
+                fvec3 color = mix(t, par.color0, par.color1);
+                float alpha = mix(t, par.alpha0, par.alpha1);
+                float beta = mix(t, par.beta0, par.beta1);
+                float size = mix(t, par.size0, par.size1);
+                r.fquad(par.pos - s.camera_pos, fvec2(size)).center().tex(s.atlas.particle.pos, s.atlas.particle.size).color(color).mix(0).alpha(alpha).beta(beta);
+            }
+
+            // Scrap
+            for (const State::ScrapParticle &par : s.scrap_particles)
+            {
+                float t = par.cur_age / float(par.life);
+                float alpha = 1 - pow(t, 5);
+                r.fquad(par.pos - s.camera_pos, par.tex).center().alpha(alpha).flip_x(par.sprite_flip_x);
+            }
         }
     }
 }

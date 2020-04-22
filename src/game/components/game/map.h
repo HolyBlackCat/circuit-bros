@@ -82,7 +82,7 @@ namespace Components::Game
                         {
                             int this_tile_as_int = layer.unsafe_at(pos);
                             TileType this_tile = TileType(this_tile_as_int);
-                            if (this_tile > TileType::_count)
+                            if (this_tile >= TileType::_count)
                                 Program::Error("Tile at ", pos, " has invalid index #", this_tile_as_int, ".");
 
                             Refl::Class::Member<i>(tiles.unsafe_at(pos)) = this_tile;
@@ -227,6 +227,19 @@ namespace Components::Game
             }
             return false;
         }
+        [[nodiscard]] static bool EnumIsSpike(TileType tile)
+        {
+            switch (tile)
+            {
+              case TileType::_count:
+              case TileType::air:
+              case TileType::stone:
+                return false;
+              case TileType::spike:
+                return true;
+            }
+            return false;
+        }
 
         [[nodiscard]] bool TileIsSolid(ivec2 pos) const
         {
@@ -234,10 +247,20 @@ namespace Components::Game
                 return false;
             return EnumIsSolid(tiles.unsafe_at(pos).mid);
         }
+        [[nodiscard]] bool TileIsSpike(ivec2 pos) const
+        {
+            if (!tiles.pos_in_range(pos))
+                return false;
+            return EnumIsSpike(tiles.unsafe_at(pos).mid);
+        }
 
         [[nodiscard]] bool PixelIsSolid(ivec2 pixel) const
         {
             return TileIsSolid(div_ex(pixel, tile_size));
+        }
+        [[nodiscard]] bool PixelIsSpike(ivec2 pixel) const
+        {
+            return TileIsSpike(div_ex(pixel, tile_size));
         }
     };
 }
