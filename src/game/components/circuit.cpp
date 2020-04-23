@@ -24,14 +24,27 @@ namespace Components
                 DECL(OutPoint INIT=&point_info) out
             )
 
-            ivec2 GetVisualHalfExtent() const override
+            void Tick(const Circuit &circuit) override
             {
-                return ivec2(3);
+                out.is_powered = false;
+                for (const InPointCon &con : in.connections)
+                {
+                    if (con.ConnectionIsPowered(circuit))
+                    {
+                        out.is_powered = true;
+                        break;
+                    }
+                }
             }
 
             void Render(ivec2 offset) const override
             {
-                r.iquad(pos + offset, atlas.nodes.region(ivec2(0, 2 + 7*powered), ivec2(7))).center(ivec2(3));
+                r.iquad(pos + offset, atlas.nodes.region(ivec2(0, 2 + 7*out.is_powered), ivec2(7))).center(ivec2(3));
+            }
+
+            ivec2 GetVisualHalfExtent() const override
+            {
+                return ivec2(3);
             }
 
             int InPointCount() const override {return 1;}
@@ -51,14 +64,27 @@ namespace Components
                 DECL(OutPoint INIT=&point_info) out
             )
 
-            ivec2 GetVisualHalfExtent() const override
+            void Tick(const Circuit &circuit) override
             {
-                return ivec2(5);
+                out.is_powered = true;
+                for (const InPointCon &con : in.connections)
+                {
+                    if (!con.ConnectionIsPowered(circuit))
+                    {
+                        out.is_powered = false;
+                        break;
+                    }
+                }
             }
 
             void Render(ivec2 offset) const override
             {
-                r.iquad(pos + offset, atlas.nodes.region(ivec2(7, 11*powered), ivec2(11))).center(ivec2(5));
+                r.iquad(pos + offset, atlas.nodes.region(ivec2(7, 11*out.is_powered), ivec2(11))).center(ivec2(5));
+            }
+
+            ivec2 GetVisualHalfExtent() const override
+            {
+                return ivec2(5);
             }
 
             int InPointCount() const override {return 1;}
@@ -68,6 +94,13 @@ namespace Components
             int GetOutPointOverlappingInPoint(int in_point_index) const override {(void)in_point_index; return 0;}
             int GetInPointOverlappingOutPoint(int in_point_index) const override {(void)in_point_index; return 0;}
         };
+    }
+
+    bool BasicNode::InPointCon::ConnectionIsPowered(const Circuit &circuit) const
+    {
+        const BasicNode &remote_node = *circuit.FindNodeOrThrow(ids.node);
+        const OutPoint &remote_point = remote_node.GetOutPoint(ids.point);
+        return remote_point.was_previously_powered ^ is_inverted;
     }
 
     void BasicNode::DrawConnection(ivec2 window_offset, ivec2 pos_src, ivec2 pos_dst, bool is_inverted, bool is_powered, float src_visual_radius, float dst_visual_radius)
@@ -143,8 +176,8 @@ namespace Components
         auto HasIdsEqualTo = [](BasicNode::NodeAndPointId ids){return [ids](const auto &obj){return obj.ids == ids;};};
 
         { // If a connection already exists, consider flipping the inverted-ness.
-            auto it = std::find_if(src_point.connections.begin(), src_point.connections.end(), HasIdsEqualTo(dst_ids));
-            if (it != src_point.connections.end() && it->is_inverted == is_inverted)
+            auto it = std::find_if(dst_point.connections.begin(), dst_point.connections.end(), HasIdsEqualTo(src_ids));
+            if (it != dst_point.connections.end() && it->is_inverted == is_inverted)
                 is_inverted = !is_inverted;
         }
 
@@ -167,8 +200,8 @@ namespace Components
         }
 
         // Add the connection.
-        src_point.connections.push_back(OutPointCon(dst_ids, is_inverted));
-        dst_point.connections.push_back(InPointCon(src_ids));
+        src_point.connections.push_back(OutPointCon(dst_ids));
+        dst_point.connections.push_back(InPointCon(src_ids, is_inverted));
     }
 
     void BasicNode::Disconnect(Circuit &circuit, int src_point_index, bool src_point_is_out, int src_con_index)
@@ -192,5 +225,52 @@ namespace Components
             std::erase_if(src_point.connections, HasIdsEqualTo(dst_ids));
             std::erase_if(dst_point.connections, HasIdsEqualTo(src_ids));
         };
+    }
+
+    void Circuit::Tick()
+    {
+        // For each 'out' connection point of each node, copy `is_powered` to `was_previously_powered`.
+        for (NodeStorage &node : nodes)
+        {
+            int out_point_count = node->OutPointCount();
+            for (int out_point_index = 0; out_point_index < out_point_count; out_point_index++)
+            {
+                BasicNode::OutPoint &out_point = node->GetOutPoint(out_point_index);
+                out_point.was_previously_powered = out_point.is_powered;
+            }
+        }
+
+        // For each node, run `Tick()`.
+        for (NodeStorage &node : nodes)
+        {
+            node->Tick(*this);
+        }
+    }
+
+    void Circuit::SaveState()
+    {
+        // For each 'out' connection point of each node, copy `is_powered` to `was_powered_before_simulation_started`.
+        for (NodeStorage &node : nodes)
+        {
+            int out_point_count = node->OutPointCount();
+            for (int out_point_index = 0; out_point_index < out_point_count; out_point_index++)
+            {
+                BasicNode::OutPoint &out_point = node->GetOutPoint(out_point_index);
+                out_point.was_powered_before_simulation_started = out_point.is_powered;
+            }
+        }
+    }
+    void Circuit::RestoreState()
+    {
+        // For each 'out' connection point of each node, copy `was_powered_before_simulation_started` to `is_powered`.
+        for (NodeStorage &node : nodes)
+        {
+            int out_point_count = node->OutPointCount();
+            for (int out_point_index = 0; out_point_index < out_point_count; out_point_index++)
+            {
+                BasicNode::OutPoint &out_point = node->GetOutPoint(out_point_index);
+                out_point.is_powered = out_point.was_powered_before_simulation_started;
+            }
+        }
     }
 }

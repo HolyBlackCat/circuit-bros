@@ -229,6 +229,17 @@ namespace Components
     World &World::operator=(World &&other) = default;
     World::~World() = default;
 
+    void World::CopyPersistentStateFrom(const World &other)
+    {
+        State &s = *state;
+        const State &other_s = *other.state;
+
+        s.camera_pos_float = other_s.camera_pos_float;
+        s.camera_vel       = other_s.camera_vel      ;
+        s.camera_pos       = other_s.camera_pos      ;
+        s.camera_shake     = other_s.camera_shake    ;
+    }
+
     void World::Tick()
     {
         State &s = *state;
@@ -359,56 +370,6 @@ namespace Components
                 s.p.death_timer++;
         }
 
-        { // Move camera
-            fvec2 target = s.p.pos with(y -= s.p.camera_offset_y);
-
-            fvec2 delta = target - s.camera_pos_float;
-            float dist = delta.len();
-            if (dist > 0.001)
-            {
-                fvec2 dir = delta / dist;
-                s.camera_vel += dir * pow(dist / 100, 1.5) * 0.5;
-            }
-            s.camera_vel *= 1 - 0.085;
-
-            s.camera_pos_float += s.camera_vel;
-
-            { // Clamp camera pos
-                fvec2 min_pos = screen_size/2;
-                fvec2 max_pos = s.map.Tiles().size() * s.map.tile_size - screen_size/2;
-
-                for (int m = 0; m < 2; m++)
-                {
-                    if (s.camera_pos_float[m] < min_pos[m])
-                    {
-                        s.camera_pos_float[m] = min_pos[m];
-                        clamp_var_min(s.camera_vel[m], 0);
-                    }
-                    if (s.camera_pos_float[m] > max_pos[m])
-                    {
-                        s.camera_pos_float[m] = max_pos[m];
-                        clamp_var_max(s.camera_vel[m], 0);
-                    }
-                }
-            }
-
-            ivec2 shake{};
-            if ((s.camera_shake > 0).any())
-            {
-                for (int m = 0; m < 2; m++)
-                {
-                    if (s.camera_shake[m] == 0)
-                        continue;
-
-                    shake[m] = (1 <= rng.integer() <= s.camera_shake[m]) * rng.sign();
-                }
-                s.camera_shake -= sign(s.camera_shake);
-            }
-
-            // Compute final camera pos
-            s.camera_pos = iround(s.camera_pos_float) + shake;
-        }
-
         { // Update particles
             { // Regular
                 for (State::Particle &par : s.particles)
@@ -485,6 +446,60 @@ namespace Components
             s.p.prev_pos = s.p.pos;
             s.p.prev_vel = s.p.vel;
             s.p.prev_on_ground = s.p.on_ground;
+        }
+    }
+    void World::PersistentTick()
+    {
+        State &s = *state;
+
+        { // Move camera
+            fvec2 target = s.p.pos with(y -= s.p.camera_offset_y);
+
+            fvec2 delta = target - s.camera_pos_float;
+            float dist = delta.len();
+            if (dist > 0.001)
+            {
+                fvec2 dir = delta / dist;
+                s.camera_vel += dir * pow(dist / 100, 1.5) * 0.5;
+            }
+            s.camera_vel *= 1 - 0.085;
+
+            s.camera_pos_float += s.camera_vel;
+
+            { // Clamp camera pos
+                fvec2 min_pos = screen_size/2;
+                fvec2 max_pos = s.map.Tiles().size() * s.map.tile_size - screen_size/2;
+
+                for (int m = 0; m < 2; m++)
+                {
+                    if (s.camera_pos_float[m] < min_pos[m])
+                    {
+                        s.camera_pos_float[m] = min_pos[m];
+                        clamp_var_min(s.camera_vel[m], 0);
+                    }
+                    if (s.camera_pos_float[m] > max_pos[m])
+                    {
+                        s.camera_pos_float[m] = max_pos[m];
+                        clamp_var_max(s.camera_vel[m], 0);
+                    }
+                }
+            }
+
+            ivec2 shake{};
+            if ((s.camera_shake > 0).any())
+            {
+                for (int m = 0; m < 2; m++)
+                {
+                    if (s.camera_shake[m] == 0)
+                        continue;
+
+                    shake[m] = (1 <= rng.integer() <= s.camera_shake[m]) * rng.sign();
+                }
+                s.camera_shake -= sign(s.camera_shake);
+            }
+
+            // Compute final camera pos
+            s.camera_pos = iround(s.camera_pos_float) + shake;
         }
     }
 

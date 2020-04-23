@@ -97,6 +97,9 @@ namespace Components
 
         std::vector<BasicNode::id_t> recently_deleted_node_ids; // When deleting nodes, their IDs should be added here.
 
+        static constexpr int circuit_tick_period_when_in_editor_mode = 15;
+        int circuit_tick_timer_for_editor_mode = 0;
+
         struct Button
         {
             ivec2 pos{}, size{};
@@ -281,9 +284,14 @@ namespace Components
             return closest_index;
         }
 
-        void RunWorldTick(World &world)
+        static void RunWorldTick(World &world, Circuit &circuit)
         {
+            circuit.Tick();
             world.Tick();
+        }
+        static void RunWorldTickPersistent(World &world)
+        {
+            world.PersistentTick();
         }
     };
 
@@ -480,12 +488,14 @@ namespace Components
             if (s.buttons.add_gate_or.IsPressed())
             {
                 s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
+                s.held_node->Tick(circuit);
                 s.eraser_mode = false;
             }
 
             if (s.buttons.add_gate_and.IsPressed())
             {
                 s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
+                s.held_node->Tick(circuit);
                 s.eraser_mode = false;
             }
 
@@ -504,10 +514,18 @@ namespace Components
             {
                 s.game_state = GameState::stopped;
                 if (world && saved_world)
-                    world = saved_world;
+                {
+                    World tmp_world = std::move(*world);
+                    world.emplace(*saved_world);
+                    world->CopyPersistentStateFrom(tmp_world);
+                }
+                circuit.RestoreState();
             }
             if (s.buttons.start_pause_continue.IsPressed() || s.hotkeys.play_pause.pressed())
             {
+                if (s.game_state == GameState::stopped)
+                    circuit.SaveState();
+
                 if (s.game_state == GameState::playing)
                     s.game_state = GameState::paused;
                 else
@@ -517,7 +535,7 @@ namespace Components
             {
                 s.game_state = GameState::paused;
                 if (world)
-                    s.RunWorldTick(*world);
+                    s.RunWorldTick(*world, circuit);
             }
         }
 
@@ -927,11 +945,29 @@ namespace Components
             }
         }
 
-        { // World tick
-            if (s.game_state == GameState::playing)
+        { // Circuit tick (in the editor mode only)
+            if (s.game_state != GameState::stopped)
             {
-                if (world)
-                    s.RunWorldTick(*world);
+                s.circuit_tick_timer_for_editor_mode = 0;
+            }
+            else
+            {
+                s.circuit_tick_timer_for_editor_mode++;
+                if (s.circuit_tick_timer_for_editor_mode >= s.circuit_tick_period_when_in_editor_mode)
+                {
+                    s.circuit_tick_timer_for_editor_mode = 0;
+                    circuit.Tick();
+                }
+            }
+        }
+
+        { // World tick (has to be done after the circuit tick)
+            if (world)
+            {
+                if (s.game_state == GameState::playing)
+                    s.RunWorldTick(*world, circuit);
+
+                s.RunWorldTickPersistent(*world);
             }
         }
 
@@ -1063,20 +1099,20 @@ namespace Components
             // Render node connections
             for (const NodeStorage &node_ptr : circuit.nodes)
             {
-                const BasicNode &src_node = *node_ptr;
+                const BasicNode &dst_node = *node_ptr;
 
-                int src_point_count = src_node.OutPointCount();
-                for (int i = 0; i < src_point_count; i++)
+                int dst_point_count = dst_node.InPointCount();
+                for (int i = 0; i < dst_point_count; i++)
                 {
-                    const BasicNode::OutPoint &src_point = src_node.GetOutPoint(i);
+                    const BasicNode::InPoint &dst_point = dst_node.GetInPoint(i);
 
-                    for (const BasicNode::OutPointCon &out_con : src_point.connections)
+                    for (const BasicNode::InPointCon &in_con : dst_point.connections)
                     {
-                        const BasicNode &dst_node = *circuit.FindNodeOrThrow(out_con.ids.node);
-                        const BasicNode::InPoint &dst_point = dst_node.GetInPoint(out_con.ids.point);
+                        const BasicNode &src_node = *circuit.FindNodeOrThrow(in_con.ids.node);
+                        const BasicNode::OutPoint &src_point = src_node.GetOutPoint(in_con.ids.point);
 
                         BasicNode::DrawConnection(s.window_offset, src_node.pos + src_point.info->offset_to_node - s.view_offset, dst_node.pos + dst_point.info->offset_to_node - s.view_offset,
-                            out_con.is_inverted, out_con.is_powered, src_point.info->visual_radius + src_point.info->extra_out_visual_radius, dst_point.info->visual_radius);
+                            in_con.is_inverted, src_point.is_powered ^ in_con.is_inverted, src_point.info->visual_radius + src_point.info->extra_out_visual_radius, dst_point.info->visual_radius);
                     }
                 }
             }

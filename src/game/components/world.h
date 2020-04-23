@@ -18,7 +18,11 @@ namespace Components
         World &operator=(World &&);
         ~World();
 
+        void CopyPersistentStateFrom(const World &other);
+
         void Tick();
+        void PersistentTick();
+
         void Render() const;
     };
 }

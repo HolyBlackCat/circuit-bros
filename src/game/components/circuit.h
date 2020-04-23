@@ -24,11 +24,11 @@ namespace Components
         MEMBERS(
             DECL(id_t INIT=0) id // Unique node id.
             DECL(ivec2 INIT{}) pos
-            DECL(bool INIT=false) powered
         )
 
-        virtual ivec2 GetVisualHalfExtent() const = 0;
+        virtual void Tick(const Circuit &circuit) = 0; // Should recalculate 'powered' state of connection points.
         virtual void Render(ivec2 offset) const = 0;
+        virtual ivec2 GetVisualHalfExtent() const = 0;
 
         [[nodiscard]] bool VisuallyContainsPoint(ivec2 point, ivec2 radius = ivec2(0)) const
         {
@@ -66,9 +66,11 @@ namespace Components
 
         SIMPLE_STRUCT_WITHOUT_NAMES( InPointCon
             DECL(NodeAndPointId) ids
+            DECL(bool INIT=false) is_inverted
             VERBATIM
             InPointCon() {} // Reflection needs a default constructor.
-            InPointCon(const NodeAndPointId &ids) : ids(ids) {}
+            InPointCon(const NodeAndPointId &ids, bool is_inverted) : ids(ids), is_inverted(is_inverted) {}
+            bool ConnectionIsPowered(const Circuit &circuit) const; // Checks if the connection is powered. This function has to find the remote node each time, so you should cache the result.
         )
         SIMPLE_STRUCT_WITHOUT_NAMES( InPoint
             DECL(std::vector<InPointCon>) connections
@@ -80,15 +82,16 @@ namespace Components
 
         SIMPLE_STRUCT_WITHOUT_NAMES( OutPointCon
             DECL(NodeAndPointId) ids
-            DECL(bool INIT=false) is_powered // Whether the connection is powered (possibly after inversion).
-            DECL(bool INIT=false) is_inverted
             VERBATIM
             OutPointCon() {} // Reflection needs a default constructor.
-            OutPointCon(const NodeAndPointId &ids, bool is_inverted) : ids(ids), is_inverted(is_inverted) {}
+            OutPointCon(const NodeAndPointId &ids) : ids(ids) {}
         )
         SIMPLE_STRUCT_WITHOUT_NAMES( OutPoint
             DECL(std::vector<OutPointCon>) connections
+            DECL(bool INIT=false) is_powered
             VERBATIM
+            bool was_previously_powered = false; // For internal use, don't touch!
+            bool was_powered_before_simulation_started = false; // For internal use, don't touch!
             const PointInfo *info = &PointInfo::Default();
             OutPoint() {}
             OutPoint(const PointInfo *info) : info(info) {}
@@ -193,5 +196,9 @@ namespace Components
                 return *ret;
             }
         )
+
+        void Tick();
+        void SaveState();
+        void RestoreState();
     };
 }
