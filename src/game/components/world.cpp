@@ -420,9 +420,17 @@ namespace Components
                 s.ParticleEffect_Jump(s.p.pos);
         }
 
-        { // Spike collisions
-            if (!s.p.IsDead() && (s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_min) || s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_max)))
-                s.p.Kill();
+        { // Death causes
+            if (!s.p.IsDead())
+            {
+                // Spikes
+                if (s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_min) || s.map.PixelIsSpike(s.p.pos + s.p.hitbox_x_max))
+                    s.p.Kill();
+
+                // Map bounds
+                if ((s.p.pos < 0).any() || (s.p.pos >= s.map.Tiles().size() * s.map.tile_size).any())
+                    s.p.Kill();
+            }
         }
 
         { // Death timer and effects
@@ -518,7 +526,7 @@ namespace Components
 
                 for (int i = 0; i < 4; i++)
                 {
-                    s.circuit_io.out_solid_dir[i] = s.p.SolidAtOffset(s.map, ivec2::dir4(i));
+                    s.circuit_io.out_solid_dir[i] = !s.p.IsDead() && s.p.SolidAtOffset(s.map, ivec2::dir4(i));
                 }
             }
 
@@ -803,7 +811,7 @@ namespace Components
             {
                 const auto &s = world.GetState();
 
-                if (!s.circuit_io.out_at_least_one_tick_executed)
+                if (!s.circuit_io.out_at_least_one_tick_executed || s.p.IsDead())
                 {
                     for (OutPoint &point : out_list)
                         point.is_powered = false;
