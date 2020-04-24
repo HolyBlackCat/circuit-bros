@@ -640,7 +640,7 @@ namespace Components
         // Input nodes
         STRUCT( SimStarted EXTENDS BasicCustomInputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -663,7 +663,7 @@ namespace Components
 
         STRUCT( Solid_Right EXTENDS BasicCustomInputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -685,7 +685,7 @@ namespace Components
         };
         STRUCT( Solid_Down EXTENDS BasicCustomInputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -707,7 +707,7 @@ namespace Components
         };
         STRUCT( Solid_Left EXTENDS BasicCustomInputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -729,7 +729,7 @@ namespace Components
         };
         STRUCT( Solid_Up EXTENDS BasicCustomInputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -856,7 +856,7 @@ namespace Components
 
             ivec2 GetVisualHalfExtent() const override
             {
-                return size * cell_size / 2;
+                return size * cell_size / 2 + 1;
             }
 
             int InPointCount() const override {return 0;}
@@ -866,14 +866,14 @@ namespace Components
         };
         STRUCT( Grid_Solid7x7 EXTENDS GenericTileGrid<GridMode::solid,7,7> )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override {return "Wall detector";}
             int GetPositionInNodeList() const override {return 10;}
         };
         STRUCT( Grid_Spike7x7 EXTENDS GenericTileGrid<GridMode::spike,7,7> )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override {return "Spike detector";}
             int GetPositionInNodeList() const override {return 11;}
@@ -882,7 +882,7 @@ namespace Components
         // Output nodes
         STRUCT( Control_Left EXTENDS BasicCustomOutputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -904,7 +904,7 @@ namespace Components
         };
         STRUCT( Control_Right EXTENDS BasicCustomOutputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {
@@ -926,7 +926,7 @@ namespace Components
         };
         STRUCT( Control_Jump EXTENDS BasicCustomOutputNode )
         {
-            UNNAMED_MEMBERS()
+            MEMBERS()
 
             std::string GetName() const override
             {

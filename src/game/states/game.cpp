@@ -26,11 +26,56 @@ namespace States
             world = world_copy = Components::World("1");
         }
 
+        void LoadMap(std::string name)
+        {
+            *this = Game();
+            world = world_copy = Components::World(name);
+        }
+
         void Tick(const State::NextState &next_state) override
         {
             (void)next_state;
 
             // ImGui::ShowDemoWindow();
+
+            { // Debug "save/load circuit" window
+                ImGui::SetNextWindowPos(ivec2(0), ImGuiCond_Appearing);
+
+                ImGui::Begin("Save/load circuit", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+                FINALLY( ImGui::End(); )
+
+                for (int i = 1; i <= 5; i++)
+                {
+                    if (ImGui::Button("Save #{}"_format(i).c_str()))
+                    {
+                        try
+                        {
+                            Stream::Output out("saved_circuit_{}.refl"_format(i));
+                            Refl::ToString(circuit, out, Refl::ToStringOptions::Pretty());
+                        }
+                        catch (std::exception &e)
+                        {
+                            Interface::MessageBox("Error", "Unable to save:\n{}"_format(e.what()));
+                        }
+                    }
+
+                    ImGui::SameLine();
+
+                    if (ImGui::Button("Load #{}"_format(i).c_str()))
+                    {
+                        try
+                        {
+                            Stream::Input in("saved_circuit_{}.refl"_format(i));
+                            LoadMap("1");
+                            Refl::FromString(circuit, in);
+                        }
+                        catch (std::exception &e)
+                        {
+                            Interface::MessageBox("Error", "Unable to load:\n{}"_format(e.what()));
+                        }
+                    }
+                }
+            }
 
             editor.Tick(world, world_copy, circuit, menu_controller, tooltip_controller);
             if (Input::Button(Input::tab).pressed())

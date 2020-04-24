@@ -181,8 +181,10 @@ namespace Components
     class Circuit
     {
       public:
-        // Nodes MUST be sorted by `id`.
-        std::vector<NodeStorage> nodes;
+        MEMBERS(
+            // Nodes MUST be sorted by `id`.
+            DECL(std::vector<NodeStorage>) nodes
+        )
 
         MAYBE_CONST(
             // Returns null if no such node.
@@ -227,7 +229,7 @@ namespace Components
         //   GetInPointLow
         //   GetOutPointLow
 
-        UNNAMED_MEMBERS()
+        MEMBERS()
 
         int GetPositionInNodeList() const override = 0;
 
