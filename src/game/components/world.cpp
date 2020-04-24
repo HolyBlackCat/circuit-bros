@@ -10,7 +10,7 @@ namespace Components
     struct World::State
     {
         SIMPLE_STRUCT( Atlas
-            DECL(Graphics::TextureAtlas::Region) sky_background, player, particle
+            DECL(Graphics::TextureAtlas::Region) sky_background, player, particle, nodes
             VERBATIM Atlas() {texture_atlas().InitRegions(*this, ".png");}
         )
         inline static Atlas atlas;
@@ -637,6 +637,7 @@ namespace Components
 
     namespace CustomNodes
     {
+        // Input nodes
         STRUCT( SimStarted EXTENDS BasicCustomInputNode )
         {
             UNNAMED_MEMBERS()
@@ -749,6 +750,136 @@ namespace Components
             }
         };
 
+        // Custom input nodes
+        enum class GridMode {solid, spike};
+        STRUCT( GenericTileGrid EXTENDS BasicNode
+            PARAM(GridMode) Mode
+            PARAM(int) SizeX
+            PARAM(int) SizeY )
+        {
+            static constexpr ivec2 size = ivec2(SizeX, SizeY);
+            static_assert(size % 2 == 1, "The size must be odd.");
+
+            static constexpr int cell_size = 8;
+
+            // Given `0 <= index < size.prod()`, returns `-size/2 <= offset <= size/2`.
+            static ivec2 PointIndexToOffset(int index)
+            {
+                return ivec2(index % size.x, index / size.x) - size/2;
+            }
+
+            using point_info_array_t = std::array<PointInfo, size.prod()>;
+            static const point_info_array_t &GetPointInfoArray()
+            {
+                static point_info_array_t ret = []{
+                    point_info_array_t ret;
+                    for (size_t i = 0; i < size.prod(); i++)
+                    {
+                        ivec2 pos = PointIndexToOffset(i);
+                        ret[i] = adjust(PointInfo::Default(), visual_radius = 0, extra_out_visual_radius = 0, half_extent = ivec2(8), offset_to_node = pos * cell_size);
+                    }
+                    return ret;
+                }();
+                return ret;
+            }
+
+            using point_array_t = std::array<OutPoint, size.prod()>;
+            static point_array_t MakePointArray()
+            {
+                const point_info_array_t &info_arr = GetPointInfoArray();
+
+                point_array_t ret;
+                for (int i = 0; i < size.prod(); i++)
+                    ret[i] = &info_arr[i];
+
+                return ret;
+            }
+
+            MEMBERS(
+                DECL(point_array_t INIT=MakePointArray()) out_list
+            )
+
+            void Tick(World &world, const Circuit &) override
+            {
+                const auto &s = world.GetState();
+
+                if (!s.circuit_io.out_at_least_one_tick_executed)
+                {
+                    for (OutPoint &point : out_list)
+                        point.is_powered = false;
+                    return;
+                }
+
+                ivec2 base_tile_pos = div_ex(s.p.pos, s.map.tile_size);
+
+                for (size_t i = 0; i < size.prod(); i++)
+                {
+                    ivec2 tile_pos = base_tile_pos + PointIndexToOffset(i);
+
+                    switch (Mode)
+                    {
+                      case GridMode::solid:
+                        out_list[i].is_powered = s.map.TileIsSolid(tile_pos);
+                        break;
+                      case GridMode::spike:
+                        out_list[i].is_powered = s.map.TileIsSpike(tile_pos);
+                        break;
+                    }
+                }
+            }
+
+            void Render(ivec2 offset) const override
+            {
+                int shape = 0;
+                switch (Mode)
+                {
+                  case GridMode::solid:
+                    shape = 0;
+                    break;
+                  case GridMode::spike:
+                    shape = 1;
+                    break;
+                }
+
+                for (int powered = 0; powered < 2; powered++)
+                {
+                    for (size_t i = 0; i < size.prod(); i++)
+                    {
+                        if (out_list[i].is_powered != powered)
+                            continue;
+
+                        ivec2 point_offset = PointIndexToOffset(i);
+                        r.iquad(pos + offset + point_offset * cell_size, World::State::atlas.nodes.region(ivec2(31+9*shape, 9*powered), ivec2(9))).center(ivec2(4));
+                    }
+                }
+            }
+
+            ivec2 GetVisualHalfExtent() const override
+            {
+                return size * cell_size / 2;
+            }
+
+            int InPointCount() const override {return 0;}
+            int OutPointCount() const override {return out_list.size();}
+            InPoint &GetInPointLow(int) override {std::terminate();}
+            OutPoint &GetOutPointLow(int index) override {return out_list[index];}
+        };
+        STRUCT( Grid_Solid7x7 EXTENDS GenericTileGrid<GridMode::solid,7,7> )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override {return "Wall detector";}
+            int GetPositionInNodeList() const override {return 10;}
+        };
+        STRUCT( Grid_Spike7x7 EXTENDS GenericTileGrid<GridMode::spike,7,7> )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override {return "Spike detector";}
+            int GetPositionInNodeList() const override {return 11;}
+        };
+
+        // Output nodes
         STRUCT( Control_Left EXTENDS BasicCustomOutputNode )
         {
             UNNAMED_MEMBERS()
@@ -759,7 +890,7 @@ namespace Components
             }
             int GetPositionInNodeList() const override
             {
-                return 10;
+                return 20;
             }
             const CustomNodeInfo &Custom_GetInfo() const override
             {
@@ -781,7 +912,7 @@ namespace Components
             }
             int GetPositionInNodeList() const override
             {
-                return 11;
+                return 21;
             }
             const CustomNodeInfo &Custom_GetInfo() const override
             {
@@ -803,7 +934,7 @@ namespace Components
             }
             int GetPositionInNodeList() const override
             {
-                return 12;
+                return 22;
             }
             const CustomNodeInfo &Custom_GetInfo() const override
             {

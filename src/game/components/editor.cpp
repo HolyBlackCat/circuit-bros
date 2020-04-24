@@ -53,6 +53,8 @@ namespace Components
         bool fully_extended = false;
         bool prev_fully_extended = false;
 
+        float background_transparency_state = 0; // Gradually changes between 0 when paused and 1 when playing.
+
         fvec2 view_offset_float{};
         ivec2 view_offset{}, prev_view_offset{}; // Camera offset in the editor.
         bool now_dragging_view = false;
@@ -382,6 +384,10 @@ namespace Components
         {
             s.need_recalc_hovered_node = true;
             s.hovering_over_node_index = -1;
+        }
+
+        { // Update background transparency
+            clamp_var(s.background_transparency_state += 0.02 * (s.game_state == GameState::playing ? 1 : -1));
         }
 
         { // Update mouse-related variables
@@ -1052,7 +1058,12 @@ namespace Components
 
         // Background
         if (s.partially_extended)
-            r.iquad(s.frame_offset, s.window_size_with_panel).center().color(fvec3(0)).alpha(0.9);
+        {
+            float t = s.background_transparency_state;
+            t = smoothstep(t);
+
+            r.iquad(s.frame_offset, s.window_size_with_panel).center().color(fvec3(0)).alpha(mix(t, 0.9, 0.55));
+        }
 
         // Grid
         if (s.partially_extended)
@@ -1185,8 +1196,8 @@ namespace Components
             }
 
             // Indicator on a hovered node
-            if (s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection && !s.now_dragging_selected_nodes
-                && (!s.eraser_mode || mouse.left.up() || !s.now_erasing_connections_instead_of_nodes))
+            if (s.game_state == GameState::stopped && s.hovering_over_node_index != size_t(-1) && !s.now_creating_rect_selection
+                && !s.now_dragging_selected_nodes && (!s.eraser_mode || mouse.left.up() || !s.now_erasing_connections_instead_of_nodes))
             {
                 const BasicNode &node = *circuit.nodes[s.hovering_over_node_index];
                 ivec2 half_extent = node.GetVisualHalfExtent() + 3;

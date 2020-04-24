@@ -298,7 +298,7 @@ namespace Components
     }
     BasicNode::PointInfo *BasicCustomNode::GetPointInfo()
     {
-        static PointInfo ret = adjust(PointInfo::Default(), visual_radius = 3.18, offset_to_node = ivec2(0,-4), half_extent = ivec2(8));
+        static PointInfo ret = adjust(PointInfo::Default(), visual_radius = 5.18, offset_to_node = ivec2(0,-4), half_extent = ivec2(8));
         return &ret;
     }
 }
