@@ -22,7 +22,7 @@ namespace Refl
     namespace impl::Class
     {
         // Indicates if a specific base class should be skipped when [de]serializing.
-        template <typename T> inline constexpr bool skip_base = Refl::Class::member_count<T> == 0; // No members or they aren't known.
+        template <typename T> inline constexpr bool skip_base = Refl::Class::member_count<T> == 0 && Meta::list_size<Refl::Class::bases<T>> == 0; // No members/bases or they aren't known.
         // Indicates if a specific field type should be skipped when [de]serializing.
         template <typename T> inline constexpr bool skip_member = Refl::Class::members_known<T> && Refl::Class::member_count<T> == 0; // No members.
     }
