@@ -1,6 +1,7 @@
 #include "circuit.h"
 
 #include "game/draw.h"
+#include "game/gui_style.h"
 #include "game/main.h"
 #include "macros/adjust.h"
 #include "meta/misc.h"
@@ -24,7 +25,9 @@ namespace Components
                 DECL(OutPoint INIT=&point_info) out
             )
 
-            void Tick(const Circuit &circuit) override
+            std::string GetName() const override {return "Or";}
+
+            void Tick(World &, const Circuit &circuit) override
             {
                 out.is_powered = false;
                 for (const InPointCon &con : in.connections)
@@ -64,7 +67,9 @@ namespace Components
                 DECL(OutPoint INIT=&point_info) out
             )
 
-            void Tick(const Circuit &circuit) override
+            std::string GetName() const override {return "And";}
+
+            void Tick(World &, const Circuit &circuit) override
             {
                 out.is_powered = true;
                 for (const InPointCon &con : in.connections)
@@ -227,7 +232,7 @@ namespace Components
         };
     }
 
-    void Circuit::Tick()
+    void Circuit::Tick(World &world)
     {
         // For each 'out' connection point of each node, copy `is_powered` to `was_previously_powered`.
         for (NodeStorage &node : nodes)
@@ -243,7 +248,7 @@ namespace Components
         // For each node, run `Tick()`.
         for (NodeStorage &node : nodes)
         {
-            node->Tick(*this);
+            node->Tick(world, *this);
         }
     }
 
@@ -272,5 +277,28 @@ namespace Components
                 out_point.is_powered = out_point.was_powered_before_simulation_started;
             }
         }
+    }
+
+
+    void BasicCustomNode::Render(ivec2 offset) const
+    {
+        r.iquad(pos + offset, Nodes::atlas.nodes.region(ivec2(18, 10*Custom_IsPowered()), ivec2(13,10))).center(ivec2(6,10));
+
+        const CustomNodeInfo &info = Custom_GetInfo();
+
+        ivec2 bg_corner = pos + offset - ivec2(info.text_stats.size.x/2, 0) - GuiStyle::padding_around_text_a;
+        ivec2 bg_size = info.text_stats.size + GuiStyle::padding_around_text_a + GuiStyle::padding_around_text_b;
+
+        r.iquad(bg_corner, bg_size).color(fvec3(0)).alpha(0.6);
+        r.itext(pos + offset, info.text).color(fvec3(10,141,255)/255).align(ivec2(0,-1));
+    }
+    ivec2 BasicCustomNode::GetVisualHalfExtent() const
+    {
+        return Custom_GetInfo().text_stats.size with(x = (_.x + 1) / 2, y -= 2);
+    }
+    BasicNode::PointInfo *BasicCustomNode::GetPointInfo()
+    {
+        static PointInfo ret = adjust(PointInfo::Default(), visual_radius = 3.18, offset_to_node = ivec2(0,-4), half_extent = ivec2(8));
+        return &ret;
     }
 }

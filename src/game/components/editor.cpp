@@ -8,10 +8,11 @@
 #include "game/draw.h"
 #include "game/main.h"
 #include "reflection/full_with_poly.h"
+#include "signals/signal_slot.h"
 
 namespace Components
 {
-    struct Editor::State
+    struct Editor::State : Sig::Slot
     {
         SIMPLE_STRUCT( Atlas
             DECL(Graphics::TextureAtlas::Region) editor_frame, editor_buttons, cursor
@@ -255,6 +256,36 @@ namespace Components
         };
         Hotkeys hotkeys;
 
+
+        struct MiscNodeEntry
+        {
+            std::string name;
+            NodeStorage original_node;
+        };
+        const std::vector<MiscNodeEntry> &GetMiscNodeList() const
+        {
+            static std::vector<MiscNodeEntry> ret = []{
+                std::vector<MiscNodeEntry> ret;
+
+                size_t count = Refl::Polymorphic::DerivedClassCount<BasicNode>();
+                for (size_t i = 0; i < count; i++)
+                {
+                    NodeStorage tmp_node = Refl::Polymorphic::ConstructFromIndex<BasicNode>(i);
+                    if (tmp_node->GetPositionInNodeList() == -1)
+                        continue;
+
+                    MiscNodeEntry &entry = ret.emplace_back();
+                    entry.name = tmp_node->GetName();
+                    entry.original_node = std::move(tmp_node);
+                }
+
+                std::sort(ret.begin(), ret.end(), [](const MiscNodeEntry &a, const MiscNodeEntry &b){return a.original_node->GetPositionInNodeList() < b.original_node->GetPositionInNodeList();});
+                return ret;
+            }();
+            return ret;
+        }
+
+
         State() {}
 
         // Returns -1 if we don't hover over a node.
@@ -286,7 +317,7 @@ namespace Components
 
         static void RunWorldTick(World &world, Circuit &circuit)
         {
-            circuit.Tick();
+            circuit.Tick(world);
             world.Tick();
         }
         static void RunWorldTickPersistent(World &world)
@@ -488,15 +519,32 @@ namespace Components
             if (s.buttons.add_gate_or.IsPressed())
             {
                 s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("Or");
-                s.held_node->Tick(circuit);
                 s.eraser_mode = false;
             }
 
             if (s.buttons.add_gate_and.IsPressed())
             {
                 s.held_node = Refl::Polymorphic::ConstructFromName<BasicNode>("And");
-                s.held_node->Tick(circuit);
                 s.eraser_mode = false;
+            }
+
+            if (s.buttons.add_gate_other.IsPressed())
+            {
+                MenuController::Menu menu;
+                menu.pos = s.buttons.add_gate_other.pos with(y += s.buttons.add_gate_other.size.y);
+
+                for (const State::MiscNodeEntry &entry : s.GetMiscNodeList())
+                {
+                    MenuController::MenuEntry::signal_t sig;
+                    Sig::Connect(sig, s, [&entry = entry](State &s)
+                    {
+                        s.held_node = entry.original_node;
+                        s.eraser_mode = false;
+                    });
+                    menu.entries.push_back(MenuController::MenuEntry(std::move(sig), Graphics::Text(font_main(), entry.name)));
+                }
+
+                menu_controller.SetMenu(std::move(menu));
             }
 
             if (s.buttons.erase_gate.IsPressed())
@@ -956,7 +1004,7 @@ namespace Components
                 if (s.circuit_tick_timer_for_editor_mode >= s.circuit_tick_period_when_in_editor_mode)
                 {
                     s.circuit_tick_timer_for_editor_mode = 0;
-                    circuit.Tick();
+                    circuit.Tick(*world);
                 }
             }
         }

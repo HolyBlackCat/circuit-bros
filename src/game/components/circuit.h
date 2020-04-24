@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+#include "graphics/text.h"
+#include "macros/adjust.h"
 #include "macros/maybe_const.h"
 #include "meta/misc.h"
 #include "program/errors.h"
@@ -15,6 +17,7 @@
 
 namespace Components
 {
+    class World;
     class Circuit;
 
     STRUCT( BasicNode POLYMORPHIC )
@@ -26,7 +29,10 @@ namespace Components
             DECL(ivec2 INIT{}) pos
         )
 
-        virtual void Tick(const Circuit &circuit) = 0; // Should recalculate 'powered' state of connection points.
+        virtual std::string GetName() const = 0;
+        virtual int GetPositionInNodeList() const {return -1;} // If returns `-1`, this node will not be listed. The list will be sorted by this value (ascending).
+
+        virtual void Tick(World &, const Circuit &circuit) = 0; // Should recalculate 'powered' state of connection points.
         virtual void Render(ivec2 offset) const = 0;
         virtual ivec2 GetVisualHalfExtent() const = 0;
 
@@ -197,8 +203,106 @@ namespace Components
             }
         )
 
-        void Tick();
+        void Tick(World &world);
         void SaveState();
         void RestoreState();
+    };
+
+
+    struct CustomNodeInfo
+    {
+        Graphics::Text text;
+        Graphics::Text::Stats text_stats;
+
+        CustomNodeInfo(Graphics::Text text) : text(text), text_stats(text.ComputeStats()) {}
+    };
+
+    STRUCT( BasicCustomNode EXTENDS BasicNode )
+    {
+        // Missing inherited functions:
+        //   GetName
+        //   Tick
+        //   InPointCount
+        //   OutPointCount
+        //   GetInPointLow
+        //   GetOutPointLow
+
+        UNNAMED_MEMBERS()
+
+        int GetPositionInNodeList() const override = 0;
+
+        // This must return a reference to a static object (probably function-local).
+        virtual const CustomNodeInfo &Custom_GetInfo() const = 0;
+        virtual bool Custom_IsPowered() const = 0;
+
+        void Render(ivec2 offset) const override final;
+        ivec2 GetVisualHalfExtent() const override final;
+
+        int GetOutPointOverlappingInPoint(int) const override final {return -1;}
+        int GetInPointOverlappingOutPoint(int) const override final {return -1;}
+
+        static PointInfo *GetPointInfo();
+    };
+
+    STRUCT( BasicCustomInputNode EXTENDS BasicCustomNode)
+    {
+        // Missing inherited functions:
+        //   GetName
+        //   GetPositionInNodeList
+        //   Custom_GetInfo
+
+        MEMBERS(
+            DECL(OutPoint INIT=GetPointInfo()) out
+        )
+
+        virtual bool Custom_ReadValue(const World &world) const = 0;
+
+        bool Custom_IsPowered() const override final {return out.is_powered;}
+
+        void Tick(World &world, const Circuit &) override final
+        {
+            out.is_powered = Custom_ReadValue(world);
+        }
+
+        int InPointCount() const override final {return 0;}
+        int OutPointCount() const override final {return 1;}
+        InPoint &GetInPointLow(int) override final {std::terminate();}
+        OutPoint &GetOutPointLow(int index) override final {(void)index; return out;}
+    };
+
+    STRUCT( BasicCustomOutputNode EXTENDS BasicCustomNode)
+    {
+        // Missing inherited functions:
+        //   GetName
+        //   GetPositionInNodeList
+        //   Custom_GetInfo
+
+        MEMBERS(
+            DECL(InPoint INIT=GetPointInfo()) in
+        )
+        bool is_powered = false;
+
+        virtual void Custom_WriteValue(World &world, bool value) const = 0;
+
+        bool Custom_IsPowered() const override final {return is_powered;}
+
+        void Tick(World &world, const Circuit &circuit) override final
+        {
+            is_powered = false;
+            for (const InPointCon &con : in.connections)
+            {
+                if (con.ConnectionIsPowered(circuit))
+                {
+                    is_powered = true;
+                    break;
+                }
+            }
+            Custom_WriteValue(world, is_powered);
+        }
+
+        int InPointCount() const override final {return 1;}
+        int OutPointCount() const override final {return 0;}
+        InPoint &GetInPointLow(int index) override final {(void)index; return in;}
+        OutPoint &GetOutPointLow(int) override final {std::terminate();}
     };
 }

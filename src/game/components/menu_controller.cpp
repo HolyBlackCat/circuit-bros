@@ -41,6 +41,9 @@ namespace Components
 
     void MenuController::SetMenu(Menu menu)
     {
+        if (menu.entries.empty())
+            return;
+
         state->menu = std::make_unique<State::MenuLow>();
         State::MenuLow &new_menu = *state->menu;
 

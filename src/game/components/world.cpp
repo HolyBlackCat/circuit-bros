@@ -1,5 +1,6 @@
 #include "world.h"
 
+#include "game/components/circuit.h"
 #include "game/components/game/map.h"
 
 #include "strings/format.h"
@@ -13,6 +14,13 @@ namespace Components
             VERBATIM Atlas() {texture_atlas().InitRegions(*this, ".png");}
         )
         inline static Atlas atlas;
+
+        static constexpr bool allow_debug_controls =
+        #ifndef NDEBUG
+            true;
+        #else
+            false;
+        #endif
 
         Game::Map map;
 
@@ -109,6 +117,50 @@ namespace Components
             bool sprite_flip_x = rng.boolean();
         };
         std::deque<ScrapParticle> scrap_particles;
+
+        struct CircuitIO
+        {
+            class Input
+            {
+                bool reset_at_next_assignment = true;
+                bool value = false;
+
+              public:
+                Input() {}
+
+                void ResetAtNextAssignment()
+                {
+                    reset_at_next_assignment = true;
+                }
+                void Assign(bool new_value)
+                {
+                    if (reset_at_next_assignment)
+                    {
+                        reset_at_next_assignment = false;
+                        value = false;
+                    }
+                    if (new_value)
+                        value = true;
+                }
+
+                bool Get() const
+                {
+                    return value;
+                }
+                explicit operator bool() const
+                {
+                    return value;
+                }
+            };
+
+            UNNAMED_MEMBERS(
+                DECL(bool INIT=false) out_at_least_one_tick_executed
+                DECL(bool[4] INIT{}) out_solid_dir
+
+                DECL(Input) in_control_left, in_control_right, in_control_jump
+            )
+        };
+        CircuitIO circuit_io;
 
         void ParticleEffect_Rocket(int count, fvec2 start_pos, fvec2 start_area_half_size, fvec2 base_vel, fvec2 vel_max_abs_delta)
         {
@@ -240,12 +292,25 @@ namespace Components
         s.camera_shake     = other_s.camera_shake    ;
     }
 
+    MAYBE_CONST(
+        CV World::State &World::GetState() CV
+        {
+            return *state;
+        }
+    )
+
     void World::Tick()
     {
         State &s = *state;
 
         { // Walk controls
-            int hc = s.p.IsDead() ? 0 : Input::Button(Input::right).down() - Input::Button(Input::left).down();
+            if (s.allow_debug_controls)
+            {
+                s.circuit_io.in_control_left.Assign(Input::Button(Input::left).down());
+                s.circuit_io.in_control_right.Assign(Input::Button(Input::right).down());
+            }
+
+            int hc = s.p.IsDead() ? 0 : s.circuit_io.in_control_right.Get() - s.circuit_io.in_control_left.Get();
 
             if (!s.p.on_ground && hc != 0 && s.p.jump_ticks_left > 0)
             {
@@ -283,10 +348,15 @@ namespace Components
         }
 
         { // Jump controls and gravity
+            if (s.allow_debug_controls)
+            {
+                s.circuit_io.in_control_jump.Assign(Input::Button(Input::up).down());
+            }
+
             if (s.p.on_ground)
                 s.p.jump_ticks_left = s.p.jump_max_len;
 
-            if (Input::Button(Input::up).up() || s.p.IsDead())
+            if (!s.circuit_io.in_control_jump.Get() || s.p.IsDead())
                 s.p.jump_ticks_left = 0;
             else if (s.p.jump_ticks_left > 0)
                 s.p.jump_ticks_left--;
@@ -442,6 +512,28 @@ namespace Components
             }
         }
 
+        { // Update circuit nodes
+            { // Output
+                s.circuit_io.out_at_least_one_tick_executed = true;
+
+                for (int i = 0; i < 4; i++)
+                {
+                    s.circuit_io.out_solid_dir[i] = s.p.SolidAtOffset(s.map, ivec2::dir4(i));
+                }
+            }
+
+            { // Input
+                Meta::cexpr_for<Refl::Class::member_count<State::CircuitIO>>([&](auto index)
+                {
+                    constexpr auto i = index.value;
+                    if constexpr (std::is_same_v<State::CircuitIO::Input, Refl::Class::member_type<State::CircuitIO, i>>)
+                    {
+                        Refl::Class::Member<i>(s.circuit_io).ResetAtNextAssignment();
+                    }
+                });
+            }
+        }
+
         { // Update `prev_*` variables
             s.p.prev_pos = s.p.pos;
             s.p.prev_vel = s.p.vel;
@@ -540,5 +632,188 @@ namespace Components
                 r.fquad(par.pos - s.camera_pos, par.tex).center().alpha(alpha).flip_x(par.sprite_flip_x);
             }
         }
+    }
+
+
+    namespace CustomNodes
+    {
+        STRUCT( SimStarted EXTENDS BasicCustomInputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "Simulation has started";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 1;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Simulation started"));
+                return ret;
+            }
+            bool Custom_ReadValue(const World &world) const override
+            {
+                return world.GetState().circuit_io.out_at_least_one_tick_executed;
+            }
+        };
+
+        STRUCT( Solid_Right EXTENDS BasicCustomInputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "Touching wall on the right";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 3;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Wall >"));
+                return ret;
+            }
+            bool Custom_ReadValue(const World &world) const override
+            {
+                return world.GetState().circuit_io.out_solid_dir[0];
+            }
+        };
+        STRUCT( Solid_Down EXTENDS BasicCustomInputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "Have ground below";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 4;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "On ground"));
+                return ret;
+            }
+            bool Custom_ReadValue(const World &world) const override
+            {
+                return world.GetState().circuit_io.out_solid_dir[1];
+            }
+        };
+        STRUCT( Solid_Left EXTENDS BasicCustomInputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "Touching wall on the left";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 2;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Wall <"));
+                return ret;
+            }
+            bool Custom_ReadValue(const World &world) const override
+            {
+                return world.GetState().circuit_io.out_solid_dir[2];
+            }
+        };
+        STRUCT( Solid_Up EXTENDS BasicCustomInputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "Touching ceiling";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 5;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Touching ceiling"));
+                return ret;
+            }
+            bool Custom_ReadValue(const World &world) const override
+            {
+                return world.GetState().circuit_io.out_solid_dir[3];
+            }
+        };
+
+        STRUCT( Control_Left EXTENDS BasicCustomOutputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "* Move to the left";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 10;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Move left"));
+                return ret;
+            }
+            void Custom_WriteValue(World &world, bool value) const override
+            {
+                world.GetState().circuit_io.in_control_left.Assign(value);
+            }
+        };
+        STRUCT( Control_Right EXTENDS BasicCustomOutputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "* Move to the right";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 11;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Move right"));
+                return ret;
+            }
+            void Custom_WriteValue(World &world, bool value) const override
+            {
+                world.GetState().circuit_io.in_control_right.Assign(value);
+            }
+        };
+        STRUCT( Control_Jump EXTENDS BasicCustomOutputNode )
+        {
+            UNNAMED_MEMBERS()
+
+            std::string GetName() const override
+            {
+                return "* Jump";
+            }
+            int GetPositionInNodeList() const override
+            {
+                return 12;
+            }
+            const CustomNodeInfo &Custom_GetInfo() const override
+            {
+                static CustomNodeInfo ret(Graphics::Text(font_main(), "Jump"));
+                return ret;
+            }
+            void Custom_WriteValue(World &world, bool value) const override
+            {
+                world.GetState().circuit_io.in_control_jump.Assign(value);
+            }
+        };
     }
 }

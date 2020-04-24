@@ -3,11 +3,16 @@
 #include <memory>
 #include <string>
 
+#include "macros/maybe_const.h"
+
 namespace Components
 {
     class World
     {
+      public:
         struct State;
+
+      private:
         std::unique_ptr<State> state;
 
       public:
@@ -19,6 +24,8 @@ namespace Components
         ~World();
 
         void CopyPersistentStateFrom(const World &other);
+
+        MAYBE_CONST( CV State &GetState() CV; )
 
         void Tick();
         void PersistentTick();
