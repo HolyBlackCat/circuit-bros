@@ -1,0 +1,575 @@
+{
+    nodes = [
+        Control_Right {
+            BasicCustomOutputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 1,
+                        pos = (-21, -150),
+                    },
+                },
+                in = (
+                    [((3, 0), false)],
+                ),
+            },
+        },
+        Or {
+            BasicNode {
+                id = 2,
+                pos = (-81, -175),
+            },
+            in = (
+                [((3, 0), false), ((6, 0), true), ((13, 0), false)],
+            ),
+            out = (
+                [((4, 0))],
+                true,
+            ),
+        },
+        Or {
+            BasicNode {
+                id = 3,
+                pos = (-66, -159),
+            },
+            in = (
+                [((5, 0), true)],
+            ),
+            out = (
+                [((2, 0)), ((1, 0))],
+                true,
+            ),
+        },
+        Or {
+            BasicNode {
+                id = 4,
+                pos = (-99, -158),
+            },
+            in = (
+                [((2, 0), true)],
+            ),
+            out = (
+                [((5, 0)), ((7, 0))],
+                false,
+            ),
+        },
+        Or {
+            BasicNode {
+                id = 5,
+                pos = (-81, -144),
+            },
+            in = (
+                [((4, 0), false), ((10, 6), false), ((17, 0), false)],
+            ),
+            out = (
+                [((3, 0)), ((12, 0))],
+                false,
+            ),
+        },
+        SimStarted {
+            BasicCustomInputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 6,
+                        pos = (-152, -173),
+                    },
+                },
+                out = (
+                    [((2, 0))],
+                    false,
+                ),
+            },
+        },
+        Control_Left {
+            BasicCustomOutputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 7,
+                        pos = (-121, -134),
+                    },
+                },
+                in = (
+                    [((4, 0), false), ((10, 27), false)],
+                ),
+            },
+        },
+        Solid_Right {
+            BasicCustomInputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 8,
+                        pos = (50, -45),
+                    },
+                },
+                out = (
+                    [((9, 0))],
+                    false,
+                ),
+            },
+        },
+        Control_Jump {
+            BasicCustomOutputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 9,
+                        pos = (-24, -45),
+                    },
+                },
+                in = (
+                    [((8, 0), false), ((12, 0), false), ((10, 27), false)],
+                ),
+            },
+        },
+        Grid_Spike7x7 {
+            GenericTileGrid {
+                BasicNode {
+                    id = 10,
+                    pos = (-126, -68),
+                },
+                out_list = (
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [((5, 0)), ((17, 0))],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [((9, 0)), ((7, 0))],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                ),
+            },
+        },
+        Grid_Solid7x7 {
+            GenericTileGrid {
+                BasicNode {
+                    id = 11,
+                    pos = (80, -125),
+                },
+                out_list = (
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [((12, 0))],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                    (
+                        [],
+                        false,
+                    ),
+                ),
+            },
+        },
+        And {
+            BasicNode {
+                id = 12,
+                pos = (12, -87),
+            },
+            in = (
+                [((11, 30), false), ((5, 0), false)],
+            ),
+            out = (
+                [((9, 0))],
+                false,
+            ),
+        },
+        Solid_Left {
+            BasicCustomInputNode {
+                BasicCustomNode {
+                    BasicNode {
+                        id = 13,
+                        pos = (0, -188),
+                    },
+                },
+                out = (
+                    [((2, 0))],
+                    false,
+                ),
+            },
+        },
+        Or {
+            BasicNode {
+                id = 17,
+                pos = (-79, -97),
+            },
+            in = (
+                [((10, 6), false)],
+            ),
+            out = (
+                [((5, 0))],
+                false,
+            ),
+        },
+    ],
+}
