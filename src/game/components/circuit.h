@@ -97,7 +97,6 @@ namespace Components
             DECL(bool INIT=false) is_powered
             VERBATIM
             bool was_previously_powered = false; // For internal use, don't touch!
-            bool was_powered_before_simulation_started = false; // For internal use, don't touch!
             const PointInfo *info = &PointInfo::Default();
             OutPoint() {}
             OutPoint(const PointInfo *info) : info(info) {}
@@ -180,6 +179,8 @@ namespace Components
 
     class Circuit
     {
+        std::vector<NodeStorage> copied_nodes;
+
       public:
         MEMBERS(
             // Nodes MUST be sorted by `id`.
