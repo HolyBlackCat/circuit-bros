@@ -126,9 +126,9 @@ namespace Components::Game
             ivec2 corner_a = div_ex(camera_pos - viewport_size/2, tile_size);
             ivec2 corner_b = div_ex(camera_pos + viewport_size/2, tile_size);
 
-            auto DrawTile = [&](ivec2 screen_pixel_pos, ivec2 tex_pos, ivec2 tex_size = ivec2(1))
+            auto DrawTile = [&](ivec2 screen_pixel_pos, ivec2 tex_pos, ivec2 tex_size = ivec2(1)) -> Render::Quad_t
             {
-                r.iquad(screen_pixel_pos, AtlasRegion().region(tex_pos * tile_size, tex_size * tile_size));
+                return r.iquad(screen_pixel_pos, AtlasRegion().region(tex_pos * tile_size, tex_size * tile_size));
             };
 
             for (ivec2 pos : corner_a <= vector_range <= corner_b)
@@ -208,7 +208,16 @@ namespace Components::Game
                     }
                     break;
                   case TileType::spike:
-                    DrawTile(pixel_pos, ivec2(4 + bool(random & 1), 5 + bool(random & 2)));
+                    if (SameAs(ivec2(0,1), {TileType::stone}))
+                        DrawTile(pixel_pos, ivec2(4 + bool(random & 1), 5 + bool(random & 2)));
+                    else if (SameAs(ivec2(0,-1), {TileType::stone}))
+                        DrawTile(pixel_pos, ivec2(4 + bool(random & 1), 5 + bool(random & 2))).flip_x().flip_y();
+                    else if (SameAs(ivec2(1,0), {TileType::stone}))
+                        DrawTile(pixel_pos + tile_size/2, ivec2(4 + bool(random & 1), 5 + bool(random & 2))).center().matrix(fmat2(0,1,-1,0));
+                    else if (SameAs(ivec2(-1,0), {TileType::stone}))
+                        DrawTile(pixel_pos + tile_size/2, ivec2(4 + bool(random & 1), 5 + bool(random & 2))).center().matrix(fmat2(0,-1,1,0));
+                    else
+                        DrawTile(pixel_pos, ivec2(4 + bool(random & 1), 5 + bool(random & 2)));
                     break;
                 }
             }
