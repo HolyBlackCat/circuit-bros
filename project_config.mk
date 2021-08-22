@@ -9,7 +9,7 @@ OUTPUT_FILE := bin/circuit-bros
 LINKER_MODE := CXX
 
 # Dependency set name
-LIBRARY_PACK_NAME := imp-re_deps_2020-04-10
+LIBRARY_PACK_NAME := imp-re_deps_2020-04-10_1
 USED_PACKAGES := openal freetype2 ogg vorbis vorbisenc vorbisfile zlib fmt double-conversion
 USED_EXTERNAL_PACKAGES :=
 ifeq ($(TARGET_OS),windows)
